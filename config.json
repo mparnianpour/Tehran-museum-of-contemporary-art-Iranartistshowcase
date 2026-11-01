@@ -1,0 +1,24 @@
+{
+  "title": "Iranian Artist Showcase",
+  "subtitle": "Tehran Museum of Contemporary Art",
+  "language": "en",
+  "languages": ["en", "fa"],
+  "strings": {
+    "fa": {
+      "title": "نمایشگاه هنرمندان ایرانی",
+      "subtitle": "موزهٔ هنرهای معاصر تهران"
+    }
+  },
+
+  "setup": "frame-01",
+  "slideshow": "slideshow.json",
+
+  "ui": {
+    "startScreen": true,
+    "scanningHint": true,
+    "caption": true,
+    "navigation": true,
+    "effectPicker": true,
+    "swipe": true
+  }
+}

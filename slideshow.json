@@ -1,0 +1,56 @@
+{
+  "settings": {
+    "interval": 6,
+    "transitionDuration": 1.4,
+    "effect": "fade",
+    "direction": "left",
+    "loop": true,
+    "shuffle": false,
+    "fit": "cover",
+    "background": "#ebe6dc",
+    "kenBurns": false,
+    "kenBurnsZoom": 0.1,
+    "pauseWhenHidden": true,
+    "effects": ["fade", "slide", "wipe", "zoom", "dissolve", "iris", "blinds", "pixelate", "dip", "cut", "random"]
+  },
+
+  "slides": [
+    {
+      "src": "artworks/placeholder-01.jpg",
+      "title": "Placeholder artwork 1 — Dawn",
+      "artist": "Replace with artist name",
+      "year": "2026",
+      "fa": { "title": "اثر نمونه ۱ — سپیده‌دم", "artist": "نام هنرمند را جایگزین کنید" }
+    },
+    {
+      "src": "artworks/placeholder-02.jpg",
+      "title": "Placeholder artwork 2 — Star Lattice",
+      "artist": "Replace with artist name",
+      "year": "2026",
+      "fa": { "title": "اثر نمونه ۲ — شبکهٔ ستاره", "artist": "نام هنرمند را جایگزین کنید" }
+    },
+    {
+      "src": "artworks/placeholder-03.jpg",
+      "title": "Placeholder artwork 3 — Marbled Ink",
+      "artist": "Replace with artist name",
+      "year": "2026",
+      "effect": "dissolve",
+      "fa": { "title": "اثر نمونه ۳ — جوهر ابر و باد", "artist": "نام هنرمند را جایگزین کنید" }
+    },
+    {
+      "src": "artworks/placeholder-04.jpg",
+      "title": "Placeholder artwork 4 — Horizon",
+      "artist": "Replace with artist name",
+      "year": "2026",
+      "fit": "contain",
+      "fa": { "title": "اثر نمونه ۴ — افق", "artist": "نام هنرمند را جایگزین کنید" }
+    },
+    {
+      "src": "artworks/placeholder-05.jpg",
+      "title": "Placeholder artwork 5 — Tile Field",
+      "artist": "Replace with artist name",
+      "year": "2026",
+      "fa": { "title": "اثر نمونه ۵ — میدان کاشی", "artist": "نام هنرمند را جایگزین کنید" }
+    }
+  ]
+}

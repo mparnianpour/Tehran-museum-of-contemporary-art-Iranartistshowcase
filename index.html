@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0c">
+  <title>Frame AR</title>
+  <link rel="stylesheet" href="css/viewer.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/",
+        "mindar-image-three": "./vendor/mind-ar/mindar-image-three.prod.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="ar-container"></div>
+
+  <section id="start" class="overlay start hidden">
+    <div class="start-card">
+      <p class="eyebrow" id="subtitle"></p>
+      <h1 id="title">Frame AR</h1>
+      <p class="intro" data-i18n="intro"></p>
+      <button id="start-button" class="primary" type="button" data-i18n="start">Start AR</button>
+      <button id="preview-button" class="link" type="button" data-i18n="preview">Preview without camera</button>
+      <div id="language-switch" class="language-switch" role="group" aria-label="Language"></div>
+    </div>
+  </section>
+
+  <div id="loading" class="overlay loading hidden" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p data-i18n="loading">Loading…</p>
+  </div>
+
+  <div id="scanning" class="overlay scanning hidden" aria-live="polite">
+    <div class="scan-card">
+      <div class="scan-target">
+        <img id="scan-preview" alt="">
+        <span class="scan-line" aria-hidden="true"></span>
+      </div>
+      <p data-i18n="scanning">Point your camera at the frame</p>
+    </div>
+  </div>
+
+  <div id="error" class="overlay error hidden" role="alert">
+    <div class="error-card">
+      <p id="error-message" data-i18n="cameraError"></p>
+      <pre id="error-detail" class="hidden"></pre>
+      <button id="retry-button" class="primary" type="button" data-i18n="retry">Try again</button>
+    </div>
+  </div>
+
+  <div id="preview-badge" class="badge hidden" data-i18n="previewBadge"></div>
+
+  <figure id="caption" class="caption hidden" aria-live="polite">
+    <figcaption>
+      <span id="caption-title" class="caption-title"></span>
+      <span id="caption-meta" class="caption-meta"></span>
+    </figcaption>
+    <span id="caption-count" class="caption-count"></span>
+  </figure>
+
+  <nav id="controls" class="controls hidden">
+    <div id="nav-buttons" class="nav-buttons">
+      <button id="prev-button" type="button" data-i18n-label="previous">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button id="play-button" type="button" data-i18n-label="pause">
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z"/></svg>
+      </button>
+      <button id="next-button" type="button" data-i18n-label="next">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <label id="effect-picker" class="effect-picker">
+      <span class="visually-hidden" data-i18n="effect">Transition</span>
+      <select id="effect-select" data-i18n-label="effect"></select>
+    </label>
+  </nav>
+
+  <script type="module" src="js/viewer.js"></script>
+</body>
+</html>

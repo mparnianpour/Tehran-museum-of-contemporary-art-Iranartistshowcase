@@ -1,0 +1,28 @@
+{
+  "name": "Dark wood frame on white tiles",
+  "target": "target.mind",
+  "preview": "target.jpg",
+  "targetSize": [717, 1024],
+  "opening": [[56.95, 56.95], [659.97, 56.95], [659.97, 967.05], [56.95, 967.05]],
+  "openingAspect": 0.66259,
+  "bleed": 0,
+  "exposure": 1,
+  "innerShadow": {
+    "strength": 0.35,
+    "size": 0.035
+  },
+  "tracking": {
+    "filterMinCF": 0.001,
+    "filterBeta": 0.01,
+    "warmupTolerance": 5,
+    "missTolerance": 10
+  },
+  "calibration": {
+    "photo": "photo.jpg",
+    "photoSize": [1633, 2281],
+    "corners": [[0.08083, 0.09255], [0.90214, 0.08987], [0.88322, 0.94358], [0.12529, 0.9445]],
+    "openingSize": null,
+    "margin": 0.0944,
+    "created": "2026-11-01"
+  }
+}

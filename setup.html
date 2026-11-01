@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Frame Setup</title>
+  <link rel="stylesheet" href="css/setup.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <strong>Frame Setup</strong>
+      <span>Calibrate a new frame or wall for the AR slideshow</span>
+    </div>
+    <a class="topbar-link" href="index.html?preview=1">Open viewer →</a>
+  </header>
+
+  <main class="layout">
+    <section class="stage-wrap">
+      <div class="stage-tabs" role="tablist">
+        <button type="button" role="tab" id="tab-photo" aria-selected="true">Photo &amp; corners</button>
+        <button type="button" role="tab" id="tab-target" aria-selected="false" disabled>Straightened</button>
+      </div>
+      <div class="stage" id="stage">
+        <canvas id="stage-canvas"></canvas>
+        <div class="stage-empty" id="stage-empty">
+          <p>Start with a photo of the frame on its wall.</p>
+        </div>
+      </div>
+      <p class="stage-hint" id="stage-hint"></p>
+    </section>
+
+    <aside class="panel">
+      <section class="step" id="step-photo">
+        <h2><span class="num">1</span> Photo</h2>
+        <p class="help">Stand straight in front of the frame and photograph it with some wall around it, in the light the exhibition will have. The tracking works best when the frame and wall have visible texture or detail.</p>
+        <label class="button primary file-button">
+          <input type="file" id="photo-input" accept="image/*">
+          Take or choose photo
+        </label>
+        <details class="load-existing">
+          <summary>Edit an existing setup instead</summary>
+          <div class="row">
+            <input type="text" id="existing-id" placeholder="frame-01" autocomplete="off" spellcheck="false">
+            <button type="button" class="button" id="existing-load">Load</button>
+          </div>
+        </details>
+      </section>
+
+      <section class="step" id="step-corners" data-needs="photo">
+        <h2><span class="num">2</span> Mark the opening</h2>
+        <p class="help">Drag the four handles onto the <b>inner corners</b> of the frame, where the picture should begin. A magnifier appears while you drag; arrow keys nudge the selected handle.</p>
+        <div class="row">
+          <button type="button" class="button" id="corners-reset">Reset handles</button>
+        </div>
+        <p class="warn hidden" id="corners-warning">The handles are crossed. Place them top-left, top-right, bottom-right, bottom-left.</p>
+      </section>
+
+      <section class="step" id="step-size" data-needs="corners">
+        <h2><span class="num">3</span> Size &amp; tracking area</h2>
+        <p class="help">Inner size of the opening (any unit). Measuring gives the most accurate shape; leave it blank to estimate from the photo.</p>
+        <div class="row size-row">
+          <label>Width <input type="number" id="size-w" min="0" step="any" inputmode="decimal" placeholder="—"></label>
+          <span class="times">×</span>
+          <label>Height <input type="number" id="size-h" min="0" step="any" inputmode="decimal" placeholder="—"></label>
+        </div>
+        <div class="chips" id="ratio-chips"></div>
+        <p class="note" id="aspect-note"></p>
+        <label class="slider">
+          <span>Frame &amp; wall around the opening <output id="margin-out"></output></span>
+          <input type="range" id="margin" min="0" max="0.6" step="0.005" value="0.12">
+        </label>
+        <p class="note">More surroundings give the tracker more detail to lock onto.</p>
+      </section>
+
+      <section class="step" id="step-look" data-needs="corners">
+        <h2><span class="num">4</span> Fit &amp; look</h2>
+        <label class="slider">
+          <span>Picture edge <output id="bleed-out"></output></span>
+          <input type="range" id="bleed" min="-0.04" max="0.04" step="0.001" value="0">
+        </label>
+        <p class="note">Positive tucks the picture under the frame lip; negative leaves a reveal.</p>
+        <label class="slider">
+          <span>Frame shadow on picture <output id="shadow-out"></output></span>
+          <input type="range" id="shadow" min="0" max="0.8" step="0.01" value="0.35">
+        </label>
+        <label class="slider">
+          <span>Brightness <output id="exposure-out"></output></span>
+          <input type="range" id="exposure" min="0.5" max="1.3" step="0.01" value="1">
+        </label>
+        <label class="check"><input type="checkbox" id="show-art" checked> Show sample artwork</label>
+      </section>
+
+      <section class="step" id="step-compile" data-needs="corners">
+        <h2><span class="num">5</span> Compile tracking data</h2>
+        <p class="help">Analyses the straightened image so phones can recognise the frame. Takes 10–60 seconds.</p>
+        <button type="button" class="button primary" id="compile">Compile</button>
+        <div class="progress hidden" id="compile-progress"><span></span></div>
+        <p class="result hidden" id="compile-result"></p>
+        <label class="check hidden" id="show-points-wrap"><input type="checkbox" id="show-points" checked> Show feature points</label>
+      </section>
+
+      <section class="step" id="step-save" data-needs="compiled">
+        <h2><span class="num">6</span> Save &amp; test</h2>
+        <div class="row stack">
+          <label>Setup ID (folder name) <input type="text" id="setup-id" placeholder="frame-02" autocomplete="off" spellcheck="false"></label>
+          <label>Display name <input type="text" id="setup-name" placeholder="Gold frame, gallery 3"></label>
+        </div>
+        <div class="row">
+          <button type="button" class="button primary" id="test-ar">Test AR on this device</button>
+          <button type="button" class="button" id="test-preview">Preview on screen</button>
+        </div>
+        <button type="button" class="button" id="download">Download setup (.zip)</button>
+        <p class="help small">To publish it, unzip at the top of the site so the files land in <code>setups/&lt;id&gt;/</code>. Then set <code>"setup": "&lt;id&gt;"</code> in <code>config.json</code>, or link to <code>index.html?setup=&lt;id&gt;</code>.</p>
+        <div class="saved hidden" id="saved-wrap">
+          <h3>Saved on this device</h3>
+          <ul id="saved-list"></ul>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script type="module" src="js/setup-tool.js"></script>
+</body>
+</html>
