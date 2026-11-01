@@ -4,7 +4,8 @@
 
 import * as THREE from 'three';
 import { loadAppConfig, loadSetup, loadSlideshow, params } from './config.js';
-import { createOpeningGeometry, createDebugOutlines } from './frame-geometry.js';
+import { createOpeningGeometry, createDebugOutlines, createTagOutlines } from './frame-geometry.js';
+import { TrackingFusion } from './tracking-fusion.js';
 import { createSlideshowMaterial, EFFECTS } from './transitions.js';
 import { Slideshow } from './slideshow.js';
 import { getStrings, applyStrings } from './i18n.js';
@@ -129,6 +130,7 @@ function createPicture(renderer) {
   const group = new THREE.Group();
   group.add(mesh);
   if (cfg.debug) group.add(createDebugOutlines(setup));
+  state.pictureGroup = group;
   return group;
 }
 
@@ -188,7 +190,7 @@ async function startAR() {
     imageTargetSrc: targetSrc,
     maxTrack: 1,
     uiLoading: '#loading',
-    uiScanning: cfg.ui.scanningHint ? '#scanning' : 'no',
+    uiScanning: 'no', // shown by us, since AprilTags can hold the picture when MindAR can't
     uiError: 'no',
     filterMinCF: t.filterMinCF,
     filterBeta: t.filterBeta,
@@ -197,10 +199,14 @@ async function startAR() {
   });
   state.mindar = mindar;
   const { renderer, scene, camera } = mindar;
+  // MindAR's anchor only reports the image-tracking pose; the picture follows the
+  // fused pose (image tracking, or AprilTags at steep angles) set every frame.
   const anchor = mindar.addAnchor(0);
-  anchor.group.add(createPicture(renderer));
-  anchor.onTargetFound = () => setFound(true);
-  anchor.onTargetLost = () => setFound(false);
+  const picture = new THREE.Group();
+  picture.matrixAutoUpdate = false;
+  picture.visible = false;
+  picture.add(createPicture(renderer));
+  scene.add(picture);
   if (cfg.debug) startDebugHud(anchor);
 
   const firstSlide = state.slideshow.start();
@@ -209,9 +215,32 @@ async function startAR() {
   } catch (err) {
     return showError(strings.cameraError, err);
   }
+
+  const fusion = new TrackingFusion({ mindar, anchor, setup });
+  state.fusion = fusion;
+  if (cfg.debug) {
+    const tagLines = new THREE.Group();
+    state.pictureGroup.add(tagLines);
+    fusion.addEventListener('tagschange', () => {
+      tagLines.clear();
+      tagLines.add(createTagOutlines(setup, fusion.tags));
+    });
+  }
+  fusion.start();
+
   await firstSlide;
   showControls();
-  runLoop(renderer, scene, camera);
+  const scanning = $('scanning');
+  if (cfg.ui.scanningHint) scanning.classList.remove('hidden');
+  runLoop(renderer, scene, camera, (dt) => {
+    const r = fusion.update(performance.now(), dt * 1000);
+    picture.visible = r.visible;
+    if (r.visible) picture.matrix.copy(r.matrix);
+    state.trackingSource = r.source;
+    state.viewAngle = r.angle;
+    if (r.visible !== state.found) setFound(r.visible);
+    if (cfg.ui.scanningHint) scanning.classList.toggle('hidden', r.visible);
+  });
 }
 
 /* ---------- preview mode (no camera) ---------- */
@@ -382,12 +411,23 @@ function startDebugHud(anchor) {
   hud.className = 'debug-hud';
   document.body.appendChild(hud);
   let updates = 0;
+  let lastDetections = 0;
   anchor.onTargetUpdate = () => { updates += 1; };
   const t = state.setup.tracking;
   setInterval(() => {
+    const f = state.fusion;
+    const detections = f ? f.detections : 0;
     state.trackingFps = updates;
-    hud.textContent = `${state.found ? 'locked' : 'searching'} · ${updates} updates/s · minCF ${t.filterMinCF} · beta ${t.filterBeta}`;
+    state.tagFps = detections - lastDetections;
+    const tags = f ? f.tags.map((tag) => `${tag.id}${tag.origin === 'setup' ? 's' : 'l'}`).join(',') || 'none' : '-';
+    const seen = f ? f.lastMarkers.map((m) => m.id).join(',') || '-' : '-';
+    hud.textContent = [
+      `${state.found ? `held by ${state.trackingSource}` : 'searching'} · view ${Math.round(state.viewAngle || 0)}°`,
+      `image ${anchor.visible ? 'on' : 'off'} ${updates}/s · minCF ${t.filterMinCF} β ${t.filterBeta}`,
+      `tags known ${tags} · seen ${seen} · ${state.tagFps}/s${f?.tagPose ? ` · err ${f.tagPose.error.toFixed(1)}px` : ''}`,
+    ].join('\n');
     updates = 0;
+    lastDetections = detections;
   }, 1000);
 }
 

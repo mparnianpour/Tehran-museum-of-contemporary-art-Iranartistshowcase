@@ -6,6 +6,7 @@ Frames and walls will change between exhibitions, so each frame is a **setup** y
 
 - `index.html`: the AR viewer.
 - `setup.html`: the setup tool for a new frame or wall.
+- `apriltag.html`: prints an AprilTag that keeps the picture in place when visitors look from the side.
 - `slideshow.json`: the artworks and the transition settings.
 - `config.json`: the title, languages, and which setup is active.
 
@@ -108,6 +109,41 @@ You can reopen an existing setup to adjust it: open *Edit an existing setup inst
 
 ---
 
+## Holding the picture from the side (AprilTags)
+
+Image tracking recognises the frame by its visual detail. That works well from the front, but from a steep side angle the detail is squashed, so the picture drifts or disappears. A small printed **AprilTag** (a black-and-white square code, the `tag36h11` family) placed inside the frame fixes this. Tags stay readable at steep angles. Visitors don't see the tag in AR, because the artwork is drawn over it.
+
+**How to use it**
+
+1. Open `apriltag.html` and print a tag at 100% scale on matte paper. Choose a black square about a third of the opening's width, for example 120–150 mm for a 40 × 60 cm frame. Standard tag36h11 images from the AprilTag project work too.
+2. Fix it flat on the wall inside the frame opening, away from the edges, so the frame's lip doesn't hide it from the side.
+3. Tell the viewer where the tag is, in one of two ways:
+   - **Best:** make a new setup with the tag in the photo. The setup tool finds it and saves its exact position in `setup.json` (`apriltag.tags`). Visitors can then start from any angle.
+   - **No new setup:** just put the tag up. The first time a phone recognises the frame from the front, the viewer works out where the tag is and remembers it on that phone. From then on, the tag holds the picture when the visitor walks to the side.
+
+Two or more tags, far apart, make side views steadier still; the viewer uses every tag it can see.
+
+**What happens while viewing**
+
+- From the front (under 30° by default), image tracking holds the picture.
+- Beyond that angle, or whenever image tracking loses the frame, the tag takes over, with a short blend so the picture doesn't jump.
+- The tag mapping is projective, so it stays exact even though phone lenses differ from the camera model the image tracker assumes.
+
+**How well it works (simulated phone camera, headless browser)**
+
+| test | picture shown | error, % of frame width |
+|---|---|---|
+| 55° side view from the start, image tracking only | 94% | 8.1% mean |
+| 55° side view from the start, tag position from the setup photo | 100% | 2.4% mean, 1.7% median |
+| front, then a 60° side view, image tracking only | 33% of side-view shots | 15% mean while shown |
+| front, then a 60° side view, tag position learned live | 64–85% of side-view shots | 1.5–3.7% while holding steady |
+
+The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would. The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag.
+
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), and `tags` (written by the setup tool). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+
+---
+
 ## URL parameters
 
 These are useful for testing, QR codes, and tuning on site without editing files.
@@ -123,7 +159,8 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `controls`, `caption`, `effectPicker`, `navigation`, `swipe` | `?controls=0` | show or hide parts of the interface |
 | `bleed`, `exposure` | `?bleed=0.01` | adjust the picture edge or brightness |
 | `filterMinCF`, `filterBeta` | `?filterBeta=0.05` | tracking smoothing (see below) |
-| `debug` | `?debug=1` | outlines the tracking image and opening, and shows the tracking rate |
+| `apriltag`, `learn`, `obliqueAngle` | `?apriltag=0` | turn AprilTag holding or learning off, or change the switch-over angle |
+| `debug` | `?debug=1` | outlines the tracking image, opening and tags, and shows what is holding the picture |
 
 **Tracking smoothing:** a lower `filterMinCF` gives steadier tracking at rest but more lag, and a higher `filterBeta` follows fast movement more closely. The defaults are `0.001` and `0.01`.
 
@@ -158,6 +195,7 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `exposure` | picture brightness, to match the room |
 | `innerShadow` | `strength` and `size` of the shadow the frame casts on the picture |
 | `tracking` | MindAR smoothing and tolerance settings |
+| `apriltag` | optional AprilTag settings, and `tags`: each tag's ID and corners in tracking-image pixels |
 | `calibration` | the photo, corners and margin it was made from, so the tool can reopen it |
 
 ## About `setups/frame-01`
@@ -165,6 +203,8 @@ These are useful for testing, QR codes, and tuning on site without editing files
 This setup was made with the setup tool from the photo of the dark wood frame on the white tiled wall. The opening was not measured, so its shape was estimated from the photo as 0.663 (close to 2:3, such as 40 × 60 cm). If the real size differs, reopen it in the setup tool, enter the measurements, and compile again. If you hang the frame on a different wall, make a new setup.
 
 In automated tests with a simulated phone camera, it locked on within about 4 seconds. With the camera held still, the picture lined up with the opening to within about 1–3% of the frame width.
+
+Its photo has no AprilTag yet. Once you put one in the frame, the viewer learns its position automatically (see above). For the most accurate result, make a new setup photo that includes the tag.
 
 ## Files
 
@@ -180,14 +220,20 @@ js/setup-tool.js, setup-core.js  setup tool UI, straightening, compiling, zip ex
 js/homography.js               perspective maths
 js/local-store.js              on-device storage for test setups
 js/i18n.js                     English and Persian interface text
+js/tracking-fusion.js          chooses image tracking or AprilTags; learns tag positions
+js/tag-detector.js, apriltag-worker.js  AprilTag detection off the main thread
+js/tag-pose.js                 maps tag corners to the picture's position, in MindAR's terms
+apriltag.html                  printable AprilTags
 setups/<id>/                   one folder per frame setup
 artworks/                      slideshow images
-vendor/                        MindAR 1.2.5 and three.js r160 (MIT), bundled so the
-                               site works without third-party CDNs
+vendor/                        MindAR 1.2.5, three.js r160 and js-aruco2 2.0 (MIT),
+                               bundled so the site works without third-party CDNs
 ```
 
 ## Credits
 
 - [MindAR](https://github.com/hiukim/mind-ar-js) (MIT): image tracking.
 - [three.js](https://threejs.org) (MIT): rendering.
+- [js-aruco2](https://github.com/damianofalcioni/js-aruco2) (MIT): AprilTag detection.
+- AprilTag tag36h11 codes: © The Regents of the University of Michigan, APRIL Robotics Lab (BSD 2-clause; the notice is in the dictionary file).
 - Their licence files are in `vendor/`.

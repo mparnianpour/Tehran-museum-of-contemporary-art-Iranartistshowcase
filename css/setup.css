@@ -165,6 +165,7 @@ code {
 }
 
 .help { margin: 0 0 12px; color: var(--ink-muted); text-wrap: pretty; }
+.help a, .result a { color: var(--accent); font-weight: 600; }
 .help.small, .note { font-size: 0.84rem; }
 .note { margin: 6px 0 12px; color: var(--ink-muted); }
 .warn { margin: 10px 0 0; color: var(--warn); font-size: 0.88rem; }

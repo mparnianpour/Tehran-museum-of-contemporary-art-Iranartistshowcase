@@ -51,6 +51,22 @@ export function createOpeningGeometry(setup, segments = 16) {
   return geometry;
 }
 
+/** Debug helper: where the AprilTags are believed to be (green: from setup, cyan: learned). */
+export function createTagOutlines(setup, tags) {
+  const group = new THREE.Group();
+  for (const tag of tags) {
+    const pts = tag.corners.map((p) => targetToAnchor(setup, p)).map(([x, y]) => new THREE.Vector3(x, y, 0.003));
+    const color = tag.origin === 'setup' ? 0x39ff14 : 0x00e5ff;
+    const material = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true });
+    group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), material));
+    // A tick from the centre to the tag's first corner shows its orientation.
+    const centre = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(0.25);
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([centre, pts[0]]), material));
+  }
+  group.renderOrder = 11;
+  return group;
+}
+
 /** Debug helper: outlines of the tracking image (grey) and the opening (magenta). */
 export function createDebugOutlines(setup) {
   const group = new THREE.Group();

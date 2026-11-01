@@ -34,6 +34,7 @@
       <section class="step" id="step-photo">
         <h2><span class="num">1</span> Photo</h2>
         <p class="help">Stand straight in front of the frame and photograph it with some wall around it, in the light the exhibition will have. The tracking works best when the frame and wall have visible texture or detail.</p>
+        <p class="help">Optional: put a <a href="apriltag.html" target="_blank">printed AprilTag</a> inside the frame before taking the photo. It keeps the picture in place when visitors look from the side.</p>
         <label class="button primary file-button">
           <input type="file" id="photo-input" accept="image/*">
           Take or choose photo
@@ -98,6 +99,7 @@
         <div class="progress hidden" id="compile-progress"><span></span></div>
         <p class="result hidden" id="compile-result"></p>
         <label class="check hidden" id="show-points-wrap"><input type="checkbox" id="show-points" checked> Show feature points</label>
+        <p class="result hidden" id="tag-note"></p>
       </section>
 
       <section class="step" id="step-save" data-needs="compiled">

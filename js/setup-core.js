@@ -188,8 +188,8 @@ export function slugify(text) {
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** The setup.json that the viewer reads. */
-export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration }) {
-  return {
+export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [] }) {
+  const json = {
     name,
     target: 'target.mind',
     preview: 'target.jpg',
@@ -209,6 +209,11 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
       created: new Date().toISOString().slice(0, 10),
     },
   };
+  if (tags.length) {
+    // AprilTags seen in the setup photo: their exact place on the wall, in tracking-image pixels.
+    json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map(([x, y]) => [round(x), round(y)]) })) };
+  }
+  return json;
 }
 
 /** JSON with short number arrays kept on one line, so setup.json stays easy to hand-edit. */

@@ -2,6 +2,7 @@
 
 import { SETUP_DEFAULTS, fetchJSON, setupUrl } from './config.js';
 import { saveLocalSetup, listLocalSetups, deleteLocalSetup } from './local-store.js';
+import { TagDetector } from './tag-detector.js';
 import {
   RATIO_PRESETS, estimateQuadAspect, isValidQuad, computeLayout, maxMargin, warpToTarget,
   compileTarget, trackingQuality, canvasToBlob, slugify, buildSetupJson, makeZip, formatJson,
@@ -25,6 +26,7 @@ const st = {
   layout: null,
   target: null,
   compiled: null, // { buffer, points, key }
+  tags: [], // AprilTags found in the straightened image: [{ id, corners }]
   drag: null,
   art: null,
 };
@@ -216,6 +218,7 @@ let rebuildTimer = 0;
 function changed() {
   st.target = null;
   st.layout = null;
+  st.tags = [];
   refreshUI();
   draw();
   clearTimeout(rebuildTimer);
@@ -232,6 +235,30 @@ function rebuildTarget() {
   st.target = warpToTarget(st.photo, st.layout);
   refreshUI();
   draw();
+  detectTags(st.target);
+}
+
+let tagDetector = null;
+
+/** Find printed AprilTags in the straightened image, so the viewer knows exactly where they are. */
+async function detectTags(target) {
+  tagDetector ||= new TagDetector({ maxSize: 2048 });
+  const res = await tagDetector.detect(target);
+  if (!res || target !== st.target) return; // busy, or the image changed meanwhile
+  st.tags = res.markers.filter((m) => m.refined).map((m) => ({ id: m.id, corners: m.corners }));
+  refreshTagNote();
+  draw();
+}
+
+function refreshTagNote() {
+  const note = $('tag-note');
+  if (st.tags.length) {
+    const ids = st.tags.map((t) => t.id).join(', ');
+    note.innerHTML = `<b class="good">AprilTag ${ids} found.</b> It will hold the picture when visitors look from the side.`;
+  } else {
+    note.innerHTML = 'No AprilTag in the photo (optional). <a href="apriltag.html" target="_blank">Print a tag</a> and place it inside the frame for steadier side views.';
+  }
+  note.classList.toggle('hidden', !st.target);
 }
 
 function refreshUI() {
@@ -442,6 +469,21 @@ function drawTarget() {
   ctx.strokeRect(f.ox + ox0 * f.s, f.oy + oy0 * f.s, ow * f.s, oh * f.s);
   ctx.restore();
 
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#39ff14';
+  ctx.fillStyle = '#39ff14';
+  ctx.font = '600 12px system-ui, sans-serif';
+  for (const tag of st.tags) {
+    const pts = tag.corners.map(([x, y]) => [f.ox + x * f.s, f.oy + y * f.s]);
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillText(`Tag ${tag.id}`, pts[0][0], pts[0][1] - 6);
+  }
+  ctx.restore();
+
   const c = st.compiled;
   if (c && c.key === compileKey() && $('show-points').checked) {
     ctx.fillStyle = accent();
@@ -573,6 +615,7 @@ function currentSetupJson(name) {
       openingSize: measuredSize(),
       margin: st.layout.margin,
     },
+    tags: st.tags,
   });
 }
 
