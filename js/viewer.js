@@ -425,6 +425,7 @@ function startDebugHud(anchor) {
       `${state.found ? `held by ${state.trackingSource}` : 'searching'} · view ${Math.round(state.viewAngle || 0)}°`,
       `image ${anchor.visible ? 'on' : 'off'} ${updates}/s · minCF ${t.filterMinCF} β ${t.filterBeta}`,
       `tags known ${tags} · seen ${seen} · ${state.tagFps}/s${f?.tagPose ? ` · err ${f.tagPose.error.toFixed(1)}px` : ''}`,
+      f ? `focal ${Math.round(f.focal)}px (${f.focalSamples.length} est.)${f.wallOffset ? ` · wall ${Math.round(f.wallOffset)}px behind` : ''}` : '',
     ].join('\n');
     updates = 0;
     lastDetections = detections;

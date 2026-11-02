@@ -58,6 +58,7 @@ export const SETUP_DEFAULTS = {
     learn: true, // learn where a tag is once the frame has been recognised from the front
     obliqueAngle: 30, // degrees: beyond this, the tag holds the picture instead of image tracking
     tags: [], // [{ id, corners: [[x, y] x4] }] in tracking-image pixels (written by the setup tool)
+    wallOffset: 0, // how far the tags' wall lies behind the opening's edge, in tracking-image pixels
   },
 };
 

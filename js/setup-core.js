@@ -2,7 +2,12 @@
 // into a straightened tracking image, compiles it for MindAR, and packages
 // the result. No UI code here.
 
-import { solveHomography, applyHomography, homographyW, estimateQuadAspect } from './homography.js';
+import { solveHomography, applyHomography, homographyW, estimateQuadAspect, invertHomography } from './homography.js';
+import { cameraMatrix, decomposeHomography, imageToPlane } from './camera.js';
+
+// Typical phone main camera: focal length about 0.7 x the photo's long side.
+// Only used to correct wall tags for depth, where a rough value is enough.
+const PHOTO_FOCAL = 0.7;
 
 export const TARGET_LONG_SIDE = 1024;
 
@@ -146,6 +151,46 @@ export function warpToTarget(photo, layout) {
   return canvas;
 }
 
+/**
+ * Fill the opening with its own median colour, so whatever is inside the frame
+ * (a board, the wall, an old picture) can't affect tracking if it changes.
+ * A thin strip next to the frame's inner edge is kept so that edge stays crisp.
+ */
+export function flattenOpening(canvas, layout, inset = 0.012) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const [[x0, y0], , [x1, y1]] = layout.opening;
+  const pad = inset * layout.openingWidth;
+  const sx = Math.round(x0 + pad);
+  const sy = Math.round(y0 + pad);
+  const w = Math.round(x1 - x0 - 2 * pad);
+  const h = Math.round(y1 - y0 - 2 * pad);
+  if (w <= 0 || h <= 0) return canvas;
+  const data = ctx.getImageData(sx, sy, w, h).data;
+  const channels = [[], [], []];
+  for (let i = 0; i < data.length; i += 4 * 7) for (let c = 0; c < 3; c++) channels[c].push(data[i + c]);
+  const med = channels.map((v) => v.sort((a, b) => a - b)[v.length >> 1]);
+  ctx.fillStyle = `rgb(${med[0]}, ${med[1]}, ${med[2]})`;
+  ctx.fillRect(sx, sy, w, h);
+  return canvas;
+}
+
+/**
+ * AprilTags found in the photo -> their corners in tracking-image pixels.
+ * Tags on the wall sit wallOffset behind the opening's edge (tracking-image
+ * pixels); seen from where the photo was taken, that depth makes them look
+ * slightly closer to the middle, which is undone here.
+ */
+export function tagsToTarget(photoTags, layout, photoSize, wallOffset = 0) {
+  if (!(wallOffset > 0)) {
+    const toTarget = invertHomography(layout.toPhoto);
+    return photoTags.map((t) => ({ id: t.id, corners: t.corners.map(([u, v]) => applyHomography(toTarget, u, v)) }));
+  }
+  const [w, h] = photoSize;
+  const K = cameraMatrix(PHOTO_FOCAL * Math.max(w, h), w / 2, h / 2);
+  const { R, t } = decomposeHomography(layout.toPhoto, K);
+  return photoTags.map((tag) => ({ id: tag.id, corners: tag.corners.map((p) => imageToPlane(R, t, K, p, wallOffset)) }));
+}
+
 let compilerModule = null;
 
 /** Compile a tracking image (canvas or image) into a MindAR .mind buffer. */
@@ -188,7 +233,7 @@ export function slugify(text) {
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** The setup.json that the viewer reads. */
-export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [] }) {
+export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [], wallOffset = 0 }) {
   const json = {
     name,
     target: 'target.mind',
@@ -206,12 +251,16 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
       corners: calibration.corners.map(([x, y]) => [round(x / calibration.photoSize[0], 5), round(y / calibration.photoSize[1], 5)]),
       openingSize: calibration.openingSize || null,
       margin: round(calibration.margin, 4),
+      ignoreInside: !!calibration.ignoreInside,
+      tagDepth: calibration.tagDepth ?? null,
       created: new Date().toISOString().slice(0, 10),
     },
   };
-  if (tags.length) {
-    // AprilTags seen in the setup photo: their exact place on the wall, in tracking-image pixels.
+  if (tags.length || wallOffset > 0) {
+    // AprilTags seen in the setup photo: their exact place on the wall, in tracking-image pixels,
+    // and how far that wall lies behind the opening's edge.
     json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map(([x, y]) => [round(x), round(y)]) })) };
+    if (wallOffset > 0) json.apriltag.wallOffset = round(wallOffset, 2);
   }
   return json;
 }

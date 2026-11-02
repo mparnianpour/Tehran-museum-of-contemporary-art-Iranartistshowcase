@@ -88,16 +88,18 @@ When the frame or the wall behind it changes, make a new setup. You can do it al
 
 1. Open `setup.html` and **take or choose a photo** of the frame on its wall, standing straight in front of it. Include some wall around the frame, and take it in the light the exhibition will have.
 2. **Drag the four handles** onto the inner corners of the frame opening, where the picture should start. A magnifier helps with precision.
-3. Enter the opening's **inner size** if you can measure it (any unit). Otherwise the shape is estimated from the photo. The *frame & wall* slider sets how much of the surroundings the phone uses to recognise the frame; more is better, up to the edge of the photo.
+3. Enter the opening's **inner size** if you can measure it (any unit). Otherwise the shape is estimated from the photo. The *frame & wall* slider sets how much of the surroundings the phone uses to recognise the frame; more is better, up to the edge of the photo. **If the wall behind the frame may change**, keep the straightened image within the frame's outer edge, so only the frame is recognised. **Ignore what's inside the frame** (on by default) does the same for the opening.
 4. Adjust the **picture edge**, the **frame shadow** and the **brightness** while you watch the preview.
-5. **Compile** the tracking data. This takes about 10 seconds on a laptop. The tool shows the detected feature points and a rough tracking-quality rating.
-6. To try it, tap **Test AR on this device**. The setup is saved in this browser only, so it runs straight away without uploading anything. When you are happy with it, tap **Download setup (.zip)**, unzip it at the top of the site (it creates `setups/<id>/`), and commit it.
+5. **AprilTags (optional):** any tags in the photo, inside the frame or on the wall, are found and saved automatically. For tags on the wall, enter how far the frame's inner edge stands out from the wall (see below).
+6. **Compile** the tracking data. This takes about 10 seconds on a laptop. The tool shows the detected feature points and a rough tracking-quality rating.
+7. To try it, tap **Test AR on this device**. The setup is saved in this browser only, so it runs straight away without uploading anything. When you are happy with it, tap **Download setup (.zip)**, unzip it at the top of the site (it creates `setups/<id>/`), and commit it.
 
 You can reopen an existing setup to adjust it: open *Edit an existing setup instead* and type its ID.
 
 **Tips for reliable tracking**
 
 - The phone recognises the frame from visual detail, such as wood grain, chips, tile joints and nearby objects. Plain white walls with a plain frame are hard to track. If the rating is *Poor*, include more surroundings, improve the lighting, or add some texture near the frame.
+- **Detail that repeats is hard too**, even when there's a lot of it. Carved, gilded frames (beading, rosettes) look alike from one spot to the next, so image tracking has trouble locking on. For frames like that, AprilTags should be the main tracker (see below).
 - Take the setup photo in the same light, and with the same surroundings, that visitors will see.
 - If the wall around the frame changes (posters, signs, furniture), make a new setup.
 
@@ -111,23 +113,30 @@ You can reopen an existing setup to adjust it: open *Edit an existing setup inst
 
 ## Holding the picture from the side (AprilTags)
 
-Image tracking recognises the frame by its visual detail. That works well from the front, but from a steep side angle the detail is squashed, so the picture drifts or disappears. A small printed **AprilTag** (a black-and-white square code, the `tag36h11` family) placed inside the frame fixes this. Tags stay readable at steep angles. Visitors don't see the tag in AR, because the artwork is drawn over it.
+Image tracking recognises the frame by its visual detail. That works well from the front, but from a steep side angle the detail is squashed, so the picture drifts or disappears. Printed **AprilTags** (black-and-white square codes, the `tag36h11` family) fix this, because they stay readable at steep angles. A tag can go in either of two places:
+
+- **Inside the frame.** Visitors don't see it in AR, because the artwork is drawn over it. One tag is enough.
+- **On the wall beside the frame.** Use **two**, one each side, at mid-height. This works whatever is inside the frame, and suits frames that are hard for image tracking, such as the ornate gold frame.
 
 **How to use it**
 
-1. Open `apriltag.html` and print a tag at 100% scale on matte paper. Choose a black square about a third of the opening's width, for example 120–150 mm for a 40 × 60 cm frame. Standard tag36h11 images from the AprilTag project work too.
-2. Fix it flat on the wall inside the frame opening, away from the edges, so the frame's lip doesn't hide it from the side.
-3. Tell the viewer where the tag is, in one of two ways:
-   - **Best:** make a new setup with the tag in the photo. The setup tool finds it and saves its exact position in `setup.json` (`apriltag.tags`). Visitors can then start from any angle.
-   - **No new setup:** just put the tag up. The first time a phone recognises the frame from the front, the viewer works out where the tag is and remembers it on that phone. From then on, the tag holds the picture when the visitor walks to the side.
-
-Two or more tags, far apart, make side views steadier still; the viewer uses every tag it can see.
+1. Open `apriltag.html` and print the tags at 100% scale on matte paper. Standard tag36h11 images from the AprilTag project work too.
+   - **Wall tags:** use **200 mm** black squares (A3 paper), IDs 0 and 1.
+   - **Inside the frame:** a black square about a third of the opening's width.
+2. Fix them flat.
+   - **Wall tags** go 15–20 cm from the frame's outer edge, so that from the side the frame's own depth doesn't hide the far one.
+   - **A tag inside the frame** goes away from the edges.
+3. Tell the viewer where the tags are:
+   - **Best:** make a new setup with the tags in the photo. The setup tool finds them anywhere in the photo and saves their exact positions in `setup.json` (`apriltag.tags`). Visitors can then start from any angle.
+     - For **wall tags**, also measure the opening's width and height, and **how far the frame's inner edge stands out from the wall**. Enter these in steps 3 and 5. The frame's depth puts the opening in front of the tags; without this, the picture slides sideways from the side (about 10% of the opening's width at 55° in tests).
+   - **Tags inside the frame, without a new setup:** just put the tag up. The first time a phone recognises the frame from the front, the viewer works out where the tag is and remembers it on that phone.
 
 **What happens while viewing**
 
-- From the front (under 30° by default), image tracking holds the picture.
-- Beyond that angle, or whenever image tracking loses the frame, the tag takes over, with a short blend so the picture doesn't jump.
-- The tag mapping is projective, so it stays exact even though phone lenses differ from the camera model the image tracker assumes.
+- With **two or more tags in view**, the tags hold the picture at any angle.
+- With one tag, image tracking holds it from the front (under 30° by default), and the tag takes over beyond that angle or whenever image tracking loses the frame. A short blend stops the picture jumping.
+- For tags on the wall, the viewer works in real 3D and places the opening in front of the wall by the measured depth. This needs the phone's real focal length, which the viewer estimates from the tags themselves whenever they're seen at an angle, and remembers on that phone. It doesn't rely on the image tracker's fixed 45° camera assumption, which phones don't match.
+- Small, distant tags are read from an enlarged copy of the camera image. That lets 15–20 cm tags be read from 2–3 m away.
 
 **How well it works (simulated phone camera, headless browser)**
 
@@ -137,10 +146,15 @@ Two or more tags, far apart, make side views steadier still; the viewer uses eve
 | 55° side view from the start, tag position from the setup photo | 100% | 2.4% mean, 1.7% median |
 | front, then a 60° side view, image tracking only | 33% of side-view shots | 15% mean while shown |
 | front, then a 60° side view, tag position learned live | 64–85% of side-view shots | 1.5–3.7% while holding steady |
+| gold frame, 6 cm deep, two 15 cm wall tags, depth **not** entered | 100% | front 3.5%, 50–55°: 14% (median) |
+| gold frame, 6 cm deep, two 15 cm wall tags, depth entered | 100% | front 1.4%, 50–55°: 5.5% (median) |
+| gold frame, 6 cm deep, two **20 cm** wall tags, depth entered | 100% | front 1.3%, 35–50°: 3.6%, 50–55°: 2.2% (median) |
 
-The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would. The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag.
+The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), and `tags` (written by the setup tool). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
+
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is the depth in tracking-image pixels. For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
 ---
 
@@ -195,16 +209,24 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `exposure` | picture brightness, to match the room |
 | `innerShadow` | `strength` and `size` of the shadow the frame casts on the picture |
 | `tracking` | MindAR smoothing and tolerance settings |
-| `apriltag` | optional AprilTag settings, and `tags`: each tag's ID and corners in tracking-image pixels |
+| `apriltag` | optional AprilTag settings; `tags`: each tag's ID and corners in tracking-image pixels; `wallOffset`: how far the tags' wall is behind the opening's edge (tracking-image pixels) |
 | `calibration` | the photo, corners and margin it was made from, so the tool can reopen it |
 
 ## About `setups/frame-01`
 
-This setup was made with the setup tool from the photo of the dark wood frame on the white tiled wall. The opening was not measured, so its shape was estimated from the photo as 0.663 (close to 2:3, such as 40 × 60 cm). If the real size differs, reopen it in the setup tool, enter the measurements, and compile again. If you hang the frame on a different wall, make a new setup.
+This is the **ornate gold frame** on the grey gallery wall, made with the setup tool from its photo. Because the wall behind it may change, the tracking image is the frame alone: it ends just inside the frame's outer edge, and the inside of the opening is ignored. The opening wasn't measured; its shape was estimated from the photo as 0.798 (close to 4:5, such as 80 × 100 cm).
 
-In automated tests with a simulated phone camera, it locked on within about 4 seconds. With the camera held still, the picture lined up with the opening to within about 1–3% of the frame width.
+**Image tracking alone does not reliably recognise this frame.** Its carving repeats, and the gilding is shiny. In tests with your photo, it never locked on to the frame alone, and only now and then when wall was included. So this frame needs the AprilTags.
 
-Its photo has no AprilTag yet. Once you put one in the frame, the viewer learns its position automatically (see above). For the most accurate result, make a new setup photo that includes the tag.
+**To finish it:**
+
+1. Print tags **0** and **1** at **200 mm** on A3 (`apriltag.html`).
+2. Fix them on the wall to the left and right of the frame, at mid-height, 15–20 cm from its outer edge.
+3. Measure the opening's width and height, and how far the frame's inner edge stands out from the wall.
+4. Take a new setup photo with the tags up. In `setup.html`, enter the sizes in step 3 and the depth in step 5, and compile.
+5. Download the setup as `frame-01` and replace this folder.
+
+Until then, the viewer has no reliable way to hold the picture on this frame. With the tags in place, tests showed the picture held 100% of the time, within 1–4% of the opening's width, from the front to 55° to the side.
 
 ## Files
 
@@ -223,6 +245,7 @@ js/i18n.js                     English and Persian interface text
 js/tracking-fusion.js          chooses image tracking or AprilTags; learns tag positions
 js/tag-detector.js, apriltag-worker.js  AprilTag detection off the main thread
 js/tag-pose.js                 maps tag corners to the picture's position, in MindAR's terms
+js/camera.js                   real 3D camera maths: focal length from tags, pose, depth
 apriltag.html                  printable AprilTags
 setups/<id>/                   one folder per frame setup
 artworks/                      slideshow images

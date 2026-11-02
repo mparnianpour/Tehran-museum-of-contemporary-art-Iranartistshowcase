@@ -6,6 +6,7 @@ import { TagDetector } from './tag-detector.js';
 import {
   RATIO_PRESETS, estimateQuadAspect, isValidQuad, computeLayout, maxMargin, warpToTarget,
   compileTarget, trackingQuality, canvasToBlob, slugify, buildSetupJson, makeZip, formatJson,
+  flattenOpening, tagsToTarget,
 } from './setup-core.js';
 
 const $ = (id) => document.getElementById(id);
@@ -26,7 +27,9 @@ const st = {
   layout: null,
   target: null,
   compiled: null, // { buffer, points, key }
-  tags: [], // AprilTags found in the straightened image: [{ id, corners }]
+  ignoreInside: true, // flatten the opening so what's inside the frame can't affect tracking
+  photoTags: [], // AprilTags found in the photo: [{ id, corners }] in photo pixels
+  tags: [], // the same tags in tracking-image pixels (on the wall plane)
   drag: null,
   art: null,
 };
@@ -57,6 +60,8 @@ function init() {
   for (const id of ['size-w', 'size-h']) $(id).addEventListener('input', () => changed());
 
   bindSlider('margin', (v) => { st.margin = v; changed(); });
+  $('ignore-inside').addEventListener('change', (e) => { st.ignoreInside = e.target.checked; changed(); });
+  $('tag-depth').addEventListener('input', () => { mapTags(); refreshTagNote(); draw(); });
   bindSlider('bleed', (v) => { st.bleed = v; draw(); });
   bindSlider('shadow', (v) => { st.shadow = v; draw(); });
   bindSlider('exposure', (v) => { st.exposure = v; draw(); });
@@ -112,6 +117,8 @@ async function loadPhotoFromUrl(url, corners = null) {
   st.photo = c;
   st.photoBlob = await canvasToBlob(c, 'image/jpeg', 0.9);
   st.compiled = null;
+  st.photoTags = [];
+  detectPhotoTags(c);
   if (corners) st.corners = corners.map(([x, y]) => [x * c.width, y * c.height]);
   else resetCorners();
   setView('photo');
@@ -128,6 +135,9 @@ async function loadExisting(id) {
     if (cal.openingSize && cal.openingSize[0] > 0) setSize(cal.openingSize[0], cal.openingSize[1], false);
     else setSize('', '', false);
     st.margin = cal.margin ?? st.margin;
+    st.ignoreInside = cal.ignoreInside ?? false;
+    $('ignore-inside').checked = st.ignoreInside;
+    $('tag-depth').value = cal.tagDepth ?? '';
     st.bleed = json.bleed ?? 0;
     st.shadow = json.innerShadow?.strength ?? st.shadow;
     st.exposure = json.exposure ?? 1;
@@ -209,7 +219,7 @@ function aspect() {
 }
 
 function compileKey() {
-  return JSON.stringify([st.corners?.map((p) => p.map((v) => v.toFixed(2))), aspect().toFixed(5), st.margin.toFixed(4)]);
+  return JSON.stringify([st.corners?.map((p) => p.map((v) => v.toFixed(2))), aspect().toFixed(5), st.margin.toFixed(4), st.ignoreInside]);
 }
 
 let rebuildTimer = 0;
@@ -233,32 +243,57 @@ function rebuildTarget() {
   st.layout = computeLayout({ corners: st.corners, aspect: a, margin });
   st.layout.margin = margin;
   st.target = warpToTarget(st.photo, st.layout);
+  if (st.ignoreInside) flattenOpening(st.target, st.layout);
+  mapTags();
+  refreshTagNote();
   refreshUI();
   draw();
-  detectTags(st.target);
 }
 
 let tagDetector = null;
 
-/** Find printed AprilTags in the straightened image, so the viewer knows exactly where they are. */
-async function detectTags(target) {
-  tagDetector ||= new TagDetector({ maxSize: 2048 });
-  const res = await tagDetector.detect(target);
-  if (!res || target !== st.target) return; // busy, or the image changed meanwhile
-  st.tags = res.markers.filter((m) => m.refined).map((m) => ({ id: m.id, corners: m.corners }));
+/** Find printed AprilTags anywhere in the photo: inside the frame or on the wall around it. */
+async function detectPhotoTags(photo) {
+  tagDetector ||= new TagDetector({ maxSize: 2400, maxScale: 1.5 });
+  let res = null;
+  for (let tries = 0; tries < 20 && !res; tries++) {
+    res = await tagDetector.detect(photo);
+    if (!res) await new Promise((r) => setTimeout(r, 150)); // detector busy with a previous photo
+  }
+  if (!res || photo !== st.photo) return;
+  const scale = photo.width / res.width;
+  st.photoTags = res.markers.filter((m) => m.refined).map((m) => ({ id: m.id, corners: m.corners.map(([x, y]) => [x * scale, y * scale]) }));
+  mapTags();
   refreshTagNote();
   draw();
 }
 
+/** How far the tags' wall is behind the opening's edge, in tracking-image pixels (0 if unknown). */
+function wallOffsetPx() {
+  const depth = parseFloat($('tag-depth').value);
+  const size = measuredSize();
+  if (!(depth > 0) || !size || !st.layout) return 0;
+  return (depth / size[0]) * st.layout.openingWidth;
+}
+
+function mapTags() {
+  st.tags = st.layout && st.photoTags.length
+    ? tagsToTarget(st.photoTags, st.layout, [st.photo.width, st.photo.height], wallOffsetPx())
+    : [];
+}
+
 function refreshTagNote() {
   const note = $('tag-note');
-  if (st.tags.length) {
-    const ids = st.tags.map((t) => t.id).join(', ');
-    note.innerHTML = `<b class="good">AprilTag ${ids} found.</b> It will hold the picture when visitors look from the side.`;
+  const depth = parseFloat($('tag-depth').value);
+  if (st.photoTags.length) {
+    const ids = st.photoTags.map((t) => t.id).join(', ');
+    let extra = ' They will hold the picture when visitors look from the side.';
+    if (depth > 0 && !measuredSize()) extra = ' <b class="poor">Enter the opening size in step 3</b> so the frame depth can be used.';
+    note.innerHTML = `<b class="good">AprilTag ${ids} found.</b>${extra}`;
   } else {
-    note.innerHTML = 'No AprilTag in the photo (optional). <a href="apriltag.html" target="_blank">Print a tag</a> and place it inside the frame for steadier side views.';
+    note.innerHTML = 'No AprilTag in this photo. That\'s fine: tags put up later are learned by the viewer once a phone recognises the frame from the front. <a href="apriltag.html" target="_blank">Print tags</a>.';
   }
-  note.classList.toggle('hidden', !st.target);
+  note.classList.toggle('hidden', !st.photo);
 }
 
 function refreshUI() {
@@ -375,6 +410,20 @@ function drawPhoto() {
     const dy = i < 2 ? -18 : 24;
     ctx.fillText(HANDLE_LABELS[i], x + dx, y + dy);
   });
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#39ff14';
+  ctx.fillStyle = '#39ff14';
+  ctx.font = '600 12px system-ui, sans-serif';
+  for (const tag of st.photoTags) {
+    const q = tag.corners.map(([x, y]) => [f.ox + x * f.s, f.oy + y * f.s]);
+    ctx.beginPath();
+    q.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillText(`Tag ${tag.id}`, q[0][0], q[0][1] - 6);
+  }
+  ctx.restore();
   if (st.drag) drawLoupe(f, st.drag.index);
 }
 
@@ -614,8 +663,11 @@ function currentSetupJson(name) {
       corners: st.corners,
       openingSize: measuredSize(),
       margin: st.layout.margin,
+      ignoreInside: st.ignoreInside,
+      tagDepth: parseFloat($('tag-depth').value) > 0 ? parseFloat($('tag-depth').value) : null,
     },
     tags: st.tags,
+    wallOffset: wallOffsetPx(),
   });
 }
 

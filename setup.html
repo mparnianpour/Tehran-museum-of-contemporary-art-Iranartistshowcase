@@ -34,7 +34,7 @@
       <section class="step" id="step-photo">
         <h2><span class="num">1</span> Photo</h2>
         <p class="help">Stand straight in front of the frame and photograph it with some wall around it, in the light the exhibition will have. The tracking works best when the frame and wall have visible texture or detail.</p>
-        <p class="help">Optional: put a <a href="apriltag.html" target="_blank">printed AprilTag</a> inside the frame before taking the photo. It keeps the picture in place when visitors look from the side.</p>
+        <p class="help">Optional: put <a href="apriltag.html" target="_blank">printed AprilTags</a> inside the frame or on the wall beside it before taking the photo. They keep the picture in place when visitors look from the side.</p>
         <label class="button primary file-button">
           <input type="file" id="photo-input" accept="image/*">
           Take or choose photo
@@ -71,7 +71,8 @@
           <span>Frame &amp; wall around the opening <output id="margin-out"></output></span>
           <input type="range" id="margin" min="0" max="0.6" step="0.005" value="0.12">
         </label>
-        <p class="note">More surroundings give the tracker more detail to lock onto.</p>
+        <p class="note">More surroundings give the tracker more detail to lock onto. If the wall behind the frame may change, keep the straightened image within the frame's outer edge, so only the frame is recognised.</p>
+        <label class="check"><input type="checkbox" id="ignore-inside" checked> Ignore what's inside the frame (it may change)</label>
       </section>
 
       <section class="step" id="step-look" data-needs="corners">
@@ -92,18 +93,28 @@
         <label class="check"><input type="checkbox" id="show-art" checked> Show sample artwork</label>
       </section>
 
+      <section class="step" id="step-tags" data-needs="photo">
+        <h2><span class="num">5</span> AprilTags (optional)</h2>
+        <p class="help">Printed tags keep the picture in place when visitors look from the side. They can go inside the frame, or on the wall beside it.</p>
+        <p class="result hidden" id="tag-note"></p>
+        <div class="row">
+          <label>If the tags are on the wall: how far the frame's inner edge stands out from the wall (same unit as the size in step 3)
+            <input type="number" id="tag-depth" min="0" step="any" inputmode="decimal" placeholder="e.g. 6"></label>
+        </div>
+        <p class="note">Measure from the wall to the edge of the opening. This keeps the picture aligned with the frame from the side.</p>
+      </section>
+
       <section class="step" id="step-compile" data-needs="corners">
-        <h2><span class="num">5</span> Compile tracking data</h2>
+        <h2><span class="num">6</span> Compile tracking data</h2>
         <p class="help">Analyses the straightened image so phones can recognise the frame. Takes 10–60 seconds.</p>
         <button type="button" class="button primary" id="compile">Compile</button>
         <div class="progress hidden" id="compile-progress"><span></span></div>
         <p class="result hidden" id="compile-result"></p>
         <label class="check hidden" id="show-points-wrap"><input type="checkbox" id="show-points" checked> Show feature points</label>
-        <p class="result hidden" id="tag-note"></p>
       </section>
 
       <section class="step" id="step-save" data-needs="compiled">
-        <h2><span class="num">6</span> Save &amp; test</h2>
+        <h2><span class="num">7</span> Save &amp; test</h2>
         <div class="row stack">
           <label>Setup ID (folder name) <input type="text" id="setup-id" placeholder="frame-02" autocomplete="off" spellcheck="false"></label>
           <label>Display name <input type="text" id="setup-name" placeholder="Gold frame, gallery 3"></label>

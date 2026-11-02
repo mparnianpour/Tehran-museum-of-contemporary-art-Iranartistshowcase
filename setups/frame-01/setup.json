@@ -1,10 +1,10 @@
 {
-  "name": "Dark wood frame on white tiles",
+  "name": "Ornate gold frame",
   "target": "target.mind",
   "preview": "target.jpg",
-  "targetSize": [717, 1024],
-  "opening": [[56.95, 56.95], [659.97, 56.95], [659.97, 967.05], [56.95, 967.05]],
-  "openingAspect": 0.66259,
+  "targetSize": [855, 1024],
+  "opening": [[94.15, 94.15], [760.84, 94.15], [760.84, 929.85], [94.15, 929.85]],
+  "openingAspect": 0.79776,
   "bleed": 0,
   "exposure": 1,
   "innerShadow": {
@@ -19,10 +19,12 @@
   },
   "calibration": {
     "photo": "photo.jpg",
-    "photoSize": [1633, 2281],
-    "corners": [[0.08083, 0.09255], [0.90214, 0.08987], [0.88322, 0.94358], [0.12529, 0.9445]],
+    "photoSize": [1109, 2400],
+    "corners": [[0.17042, 0.30383], [0.84214, 0.29863], [0.84032, 0.68318], [0.1898, 0.6851]],
     "openingSize": null,
-    "margin": 0.0944,
-    "created": "2026-11-01"
+    "margin": 0.1412,
+    "ignoreInside": true,
+    "tagDepth": null,
+    "created": "2026-11-02"
   }
 }

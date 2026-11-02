@@ -3,9 +3,13 @@
 // marker corners in the source's pixel coordinates.
 
 export class TagDetector {
-  constructor({ family = 'tag36h11', maxSize = 1280, maxHamming = 3 } = {}) {
+  // Small camera frames are enlarged (up to maxScale) before detection: tags
+  // only ~25-35 px wide, as on a wall seen from 2-3 m, are missed at 1x but
+  // read reliably at 1.5-2x.
+  constructor({ family = 'tag36h11', maxSize = 1280, maxScale = 2, maxHamming = 3 } = {}) {
     this.family = family;
     this.maxSize = maxSize;
+    this.maxScale = maxScale;
     this.maxHamming = maxHamming;
     this.worker = new Worker(new URL('./apriltag-worker.js', import.meta.url));
     this.canvas = document.createElement('canvas');
@@ -33,13 +37,14 @@ export class TagDetector {
     const sw = source.videoWidth || source.naturalWidth || source.width;
     const sh = source.videoHeight || source.naturalHeight || source.height;
     if (!sw || !sh) return Promise.resolve(null);
-    const scale = Math.min(1, this.maxSize / Math.max(sw, sh));
+    const scale = Math.min(this.maxScale, this.maxSize / Math.max(sw, sh));
     const w = Math.round(sw * scale);
     const h = Math.round(sh * scale);
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
+    this.ctx.imageSmoothingQuality = 'high';
     this.ctx.drawImage(source, 0, 0, w, h);
     const { buffer } = this.ctx.getImageData(0, 0, w, h).data;
 

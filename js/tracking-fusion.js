@@ -10,12 +10,19 @@
 // recognised from the front, the tag's corners are projected onto the wall
 // and remembered on this device.
 //
+// Tags may sit on the wall around the frame, behind the plane of the opening
+// (apriltag.wallOffset, in tracking-image pixels). Then the tag pose is worked
+// out in real 3D with the phone's focal length, estimated from the tags
+// themselves, and the opening is placed that far in front of the wall.
+//
 // Events: 'tagschange' (known tag placements changed)
 
 import * as THREE from 'three';
 import { TagDetector } from './tag-detector.js';
+import { solveHomographyLS, applyHomography } from './homography.js';
 import {
   solvePlanarPose, anchorMatrixFromMvt, mvtFromAnchorMatrix, imageToMarker, viewAngle, OneEuroMatrixFilter,
+  cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
 } from './tag-pose.js';
 
 const TAG_FRESH_MS = 300; // how long a tag pose stays usable after the last detection
@@ -23,8 +30,14 @@ const BLEND_MS = 350; // cross-blend time when switching between image and tag t
 const LEARN_MAX_ANGLE = 25; // only learn tag placements from near-frontal views
 const LEARN_MIN_SAMPLES = 8;
 const LEARN_MAX_SAMPLES = 30;
-const MIN_TAG_SIDE_PX = 14; // ignore tags smaller than this in the camera image
+// Ignore tags too small to trust. A tag seen steeply from the side is narrow but
+// still decoded reliably, and dropping it (leaving one tag far from the frame)
+// costs far more accuracy than its slightly rougher corners do.
+const MIN_TAG_LONG_SIDE_PX = 14;
+const MIN_TAG_SHORT_SIDE_PX = 5;
 const MAX_POSE_ERROR_PX = 3; // reject tag poses that don't fit the corners well
+const FOCAL_SAMPLES = 40; // focal-length estimates kept (median used)
+const DEFAULT_FOCAL = 0.75; // x the camera image's long side, typical for phone main cameras
 
 const median = (values) => {
   const s = [...values].sort((a, b) => a - b);
@@ -72,6 +85,29 @@ export class TrackingFusion extends EventTarget {
     this.lastSave = 0;
     this.detections = 0;
     this.lastMarkers = [];
+    this.focalSamples = [];
+  }
+
+  get focalKey() {
+    return `frame-ar:focal:${this.inputW}x${this.inputH}`;
+  }
+
+  /** The phone's camera matrix: focal length estimated from tags seen at an angle, remembered per camera size. */
+  get Kreal() {
+    return cameraMatrix(this.focal, this.inputW / 2, this.inputH / 2);
+  }
+
+  _addFocalSample(f) {
+    const long = Math.max(this.inputW, this.inputH);
+    if (!(f > 0.3 * long && f < 3 * long)) return;
+    this.focalSamples.push(f);
+    if (this.focalSamples.length > FOCAL_SAMPLES) this.focalSamples.shift();
+    if (this.focalSamples.length >= 5) {
+      this.focal = median(this.focalSamples);
+      if (this.focalSamples.length % 10 === 0) {
+        try { localStorage.setItem(this.focalKey, String(this.focal)); } catch (err) { /* ignore */ }
+      }
+    }
   }
 
   get storageKey() {
@@ -88,6 +124,10 @@ export class TrackingFusion extends EventTarget {
     this.post = this.mindar.postMatrixs[0];
     this.postInv = this.post.clone().invert();
     this.markerH = c.markerDimensions[0][1];
+    this.wallOffset = Math.max(0, Number(this.cfg.wallOffset) || 0);
+    let saved = NaN;
+    try { saved = parseFloat(localStorage.getItem(this.focalKey)); } catch (err) { /* ignore */ }
+    this.focal = Number.isFinite(saved) ? saved : DEFAULT_FOCAL * Math.max(this.inputW, this.inputH);
     if (!this.cfg.enabled) return;
 
     for (const t of this.cfg.tags || []) {
@@ -136,11 +176,14 @@ export class TrackingFusion extends EventTarget {
     if (tagFresh) this.angle = viewAngle(this.tagPose.matrix);
     else if (imageVisible) this.angle = viewAngle(imageMatrix);
 
-    // Prefer the tag at steep angles (with a little hysteresis so it doesn't flicker).
+    // Prefer the tags at steep angles (with a little hysteresis so it doesn't flicker),
+    // and at any angle when two or more are in view: tags spread around the frame
+    // pin it down better than image tracking of a frame with repetitive carving.
     const oblique = this.cfg.obliqueAngle ?? 30;
     const threshold = this.source === 'tag' ? oblique - 5 : oblique;
+    const multiTag = tagFresh && this.tagPose.ids.length >= 2;
     let source = null;
-    if (tagFresh && (!imageVisible || this.angle > threshold)) source = 'tag';
+    if (tagFresh && (!imageVisible || multiTag || this.angle > threshold)) source = 'tag';
     else if (imageVisible) source = 'image';
     else if (tagFresh) source = 'tag';
 
@@ -161,13 +204,31 @@ export class TrackingFusion extends EventTarget {
     this.detections += 1;
     this.lastMarkers = res.markers;
     if (res.width !== this.inputW || res.height !== this.inputH) return;
-    const markers = res.markers.filter((m) => Math.min(...sideLengths(m.corners)) >= MIN_TAG_SIDE_PX);
+    const markers = res.markers.filter((m) => {
+      const sides = sideLengths(m.corners);
+      return Math.max(...sides) >= MIN_TAG_LONG_SIDE_PX && Math.min(...sides) >= MIN_TAG_SHORT_SIDE_PX;
+    });
 
     if (this.cfg.learn && imageAtGrab && viewAngle(imageAtGrab) <= LEARN_MAX_ANGLE) {
       const mvt = mvtFromAnchorMatrix(imageAtGrab, this.postInv, this.markerH);
+      let toWall;
+      if (this.wallOffset > 0) {
+        // Image tracking describes the opening's plane; the tags are on the wall behind it.
+        const P = [mvt[0][0], mvt[0][1], mvt[0][3], mvt[1][0], mvt[1][1], mvt[1][3], mvt[2][0], mvt[2][1], mvt[2][3]];
+        const K = this.K;
+        const Hfront = [
+          K[0][0] * P[0] + K[0][2] * P[6], K[0][0] * P[1] + K[0][2] * P[7], K[0][0] * P[2] + K[0][2] * P[8],
+          K[1][1] * P[3] + K[1][2] * P[6], K[1][1] * P[4] + K[1][2] * P[7], K[1][1] * P[5] + K[1][2] * P[8],
+          P[6], P[7], P[8],
+        ];
+        const { R, t } = decomposeHomography(Hfront, this.Kreal);
+        toWall = (p) => imageToPlane(R, t, this.Kreal, p, this.wallOffset);
+      } else {
+        toWall = (p) => imageToMarker(mvt, this.K, p);
+      }
       for (const m of markers) {
         if (this.known.get(m.id)?.origin === 'setup') continue;
-        this._learn(m.id, m.corners.map((p) => imageToMarker(mvt, this.K, p)));
+        this._learn(m.id, m.corners.map(toWall));
       }
     }
 
@@ -184,13 +245,43 @@ export class TrackingFusion extends EventTarget {
       ids.push(m.id);
     }
     if (world.length < 4) return;
-    const pose = solvePlanarPose(world, image, this.K);
+    const pose = this.wallOffset > 0 ? this._poseWithDepth(world, image) : solvePlanarPose(world, image, this.K);
     if (!pose || pose.error > MAX_POSE_ERROR_PX) return;
     const raw = anchorMatrixFromMvt(this.controller, this.post, pose.mvt);
     const nowMs = performance.now();
     if (!this.tagPose || nowMs - this.tagPose.time > 500) this.filter.reset();
     const matrix = new THREE.Matrix4().fromArray(this.filter.filter(res.time, raw.elements));
     this.tagPose = { matrix, time: nowMs, error: pose.error, ids };
+  }
+
+  /**
+   * Tags on the wall, opening wallOffset in front of it: find the camera in 3D
+   * from the tags (with the estimated focal length), project the opening's
+   * corners at their real depth, and hand MindAR's renderer the mapping that
+   * puts the picture exactly there.
+   */
+  _poseWithDepth(world, image) {
+    let H;
+    try {
+      H = solveHomographyLS(world, image);
+    } catch (err) {
+      return null;
+    }
+    let sq = 0;
+    for (let i = 0; i < world.length; i++) {
+      const [u, v] = applyHomography(H, world[i][0], world[i][1]);
+      sq += (u - image[i][0]) ** 2 + (v - image[i][1]) ** 2;
+    }
+    const error = Math.sqrt(sq / world.length);
+    const f = focalFromHomography(H, this.inputW / 2, this.inputH / 2);
+    if (f) this._addFocalSample(f);
+    const K = this.Kreal;
+    const { R, t } = decomposeHomography(H, K);
+    const corners = this.setup.opening;
+    const projected = corners.map(([X, Y]) => projectPoint(R, t, K, X, Y, -this.wallOffset));
+    if (projected.some((p) => !(p[2] > 0))) return null;
+    const view = solvePlanarPose(corners, projected.map(([u, v]) => [u, v]), this.K);
+    return view && { mvt: view.mvt, error };
   }
 
   /** Accumulate a tag's corners on the wall (marker px) seen from the front; keep a robust median. */

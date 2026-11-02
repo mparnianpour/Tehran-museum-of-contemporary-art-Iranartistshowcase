@@ -61,8 +61,8 @@
         <ol>
           <li>Print at <b>100% / Actual size</b>, not “fit to page”, preferably on <b>matte</b> paper (shiny paper reflects light into the camera). After printing, check the 50 mm bar with a ruler.</li>
           <li>Cut along the dashed line, keeping the white border around the black square.</li>
-          <li>Fix it <b>flat on the wall inside the frame opening</b>, away from the edges, so the frame's lip doesn't hide it from the side. Bigger is better: about a third of the opening's width works well (for example 120–150 mm in a 40 × 60 cm frame). Two tags far apart make side views steadier still.</li>
-          <li>Then either make a new setup with the tag in the photo, so the setup tool saves its exact position (most accurate), or simply use it: the viewer learns where the tag is the first time a phone recognises the frame from the front.</li>
+          <li>Fix it <b>flat</b>, either inside the frame opening or on the wall beside the frame. On the wall, use <b>two tags</b>, one each side of the frame at mid-height, 15–20 cm from the frame's outer edge so the frame's depth doesn't hide them from the side. Bigger is better: <b>200 mm</b> tags (A3) stay readable from 2–3 m and at steep angles. Inside a smaller frame, about a third of the opening's width works well.</li>
+          <li>Then make a new setup with the tags in the photo, so the setup tool saves their exact positions. For tags on the wall, also measure how far the frame's inner edge stands out from the wall. Tags inside the frame can also just be put up: the viewer learns where they are the first time a phone recognises the frame from the front.</li>
         </ol>
       </div>
     </div>
@@ -100,15 +100,18 @@
           .replace('<svg ', `<svg width="${10 * cell}mm" height="${10 * cell}mm" role="img" aria-label="AprilTag ${id}" `);
         const wrap = document.createElement('div');
         wrap.className = 'tag';
-        wrap.innerHTML = `<div class="cut" style="padding:${cell}mm">${svg}</div>`
+        const pad = Math.min(cell, 6); // a little extra white outside the tag's own white border, for cutting
+        wrap.innerHTML = `<div class="cut" style="padding:${pad}mm">${svg}</div>`
           + `<div class="label">AprilTag tag36h11 · ID ${id} · black square ${size} mm</div>`
           + '<div class="ruler"><span></span>50 mm</div>';
         sheet.appendChild(wrap);
       }
-      const total = 12 * cell;
+      const total = 10 * cell + 2 * Math.min(cell, 6);
       const warning = $('warning');
       warning.hidden = total <= 190;
-      warning.textContent = `With the cutting margin this is ${Math.round(total)} mm wide, larger than A4. Use A3 or a print shop, or reduce the size.`;
+      warning.textContent = total <= 277
+        ? `With its white border this is ${Math.round(total)} mm wide, too big for A4: print it on A3.`
+        : `With its white border this is ${Math.round(total)} mm wide, larger than A3: use a print shop, or reduce the size.`;
     }
 
     $('ids').addEventListener('input', render);

@@ -62,6 +62,11 @@ export function solvePlanarPose(world, image, K) {
   };
 }
 
+// Real 3D camera geometry (focal length, rigid pose, parallax) lives in camera.js.
+export {
+  cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
+} from './camera.js';
+
 /** MindAR anchor matrix (what MindAR would assign to anchor.group.matrix) from an mvt. */
 export function anchorMatrixFromMvt(controller, postMatrix, mvt, rotated = false) {
   let world = controller.getWorldMatrix(mvt, 0);
