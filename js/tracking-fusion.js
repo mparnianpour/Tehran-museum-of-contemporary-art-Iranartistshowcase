@@ -89,12 +89,35 @@ export class TrackingFusion extends EventTarget {
     this.detections = 0;
     this.lastMarkers = [];
     this.focalSamples = [];
+    this.wantCamera = (setup.occluders || []).length > 0; // pillars to hide behind need the phone's position
     this.detectInterval = 100; // smoothed time between detection results (ms)
     this.lastResultTime = 0;
   }
 
   get tagFreshMs() {
     return Math.min(TAG_FRESH_MAX_MS, Math.max(TAG_FRESH_MIN_MS, 2.5 * this.detectInterval));
+  }
+
+  /** Phone position in the picture's frame (tracking-image px, z < 0 in front) from a rigid pose of that plane. */
+  static cameraCentre(R, t) {
+    return [
+      -(R[0] * t[0] + R[3] * t[1] + R[6] * t[2]),
+      -(R[1] * t[0] + R[4] * t[1] + R[7] * t[2]),
+      -(R[2] * t[0] + R[5] * t[1] + R[8] * t[2]),
+    ];
+  }
+
+  /** Real rigid pose of the picture's plane from an image-tracking anchor matrix (re-solved with the phone's lens). */
+  _poseFromImage(anchorMatrix) {
+    const mvt = mvtFromAnchorMatrix(anchorMatrix, this.postInv, this.markerH);
+    const P = [mvt[0][0], mvt[0][1], mvt[0][3], mvt[1][0], mvt[1][1], mvt[1][3], mvt[2][0], mvt[2][1], mvt[2][3]];
+    const K = this.K;
+    const Hfront = [
+      K[0][0] * P[0] + K[0][2] * P[6], K[0][0] * P[1] + K[0][2] * P[7], K[0][0] * P[2] + K[0][2] * P[8],
+      K[1][1] * P[3] + K[1][2] * P[6], K[1][1] * P[4] + K[1][2] * P[7], K[1][1] * P[5] + K[1][2] * P[8],
+      P[6], P[7], P[8],
+    ];
+    return decomposeHomography(Hfront, this.Kreal);
   }
 
   get focalKey() {
@@ -168,7 +191,7 @@ export class TrackingFusion extends EventTarget {
     return v && v.videoWidth === this.inputW && v.videoHeight === this.inputH && v.readyState >= 2;
   }
 
-  /** Call once per rendered frame. Returns { visible, matrix, source, angle }. */
+  /** Call once per rendered frame. Returns { visible, matrix, source, angle, camera }. */
   update(now, dtMs = 16) {
     const imageVisible = !!this.anchor.visible;
     const imageMatrix = this.anchor.group.matrix;
@@ -206,7 +229,13 @@ export class TrackingFusion extends EventTarget {
       else this.output.copy(target);
     }
     this.visible = !!source;
-    return { visible: this.visible, matrix: this.output, source, angle: this.angle };
+    let camera = null;
+    if (this.wantCamera && source === 'tag') camera = this.tagPose.C;
+    else if (this.wantCamera && source === 'image') {
+      const { R, t } = this._poseFromImage(imageMatrix);
+      camera = TrackingFusion.cameraCentre(R, t);
+    }
+    return { visible: this.visible, matrix: this.output, source, angle: this.angle, camera };
   }
 
   _onDetections(res, imageAtGrab) {
@@ -226,14 +255,7 @@ export class TrackingFusion extends EventTarget {
       let toWall;
       if (this.wallOffset > 0) {
         // Image tracking describes the opening's plane; the tags are on the wall behind it.
-        const P = [mvt[0][0], mvt[0][1], mvt[0][3], mvt[1][0], mvt[1][1], mvt[1][3], mvt[2][0], mvt[2][1], mvt[2][3]];
-        const K = this.K;
-        const Hfront = [
-          K[0][0] * P[0] + K[0][2] * P[6], K[0][0] * P[1] + K[0][2] * P[7], K[0][0] * P[2] + K[0][2] * P[8],
-          K[1][1] * P[3] + K[1][2] * P[6], K[1][1] * P[4] + K[1][2] * P[7], K[1][1] * P[5] + K[1][2] * P[8],
-          P[6], P[7], P[8],
-        ];
-        const { R, t } = decomposeHomography(Hfront, this.Kreal);
+        const { R, t } = this._poseFromImage(imageAtGrab);
         toWall = (p) => imageToPlane(R, t, this.Kreal, p, this.wallOffset);
       } else {
         toWall = (p) => imageToMarker(mvt, this.K, p);
@@ -259,11 +281,21 @@ export class TrackingFusion extends EventTarget {
     if (world.length < 4) return;
     const pose = this.wallOffset > 0 ? this._poseWithDepth(world, image) : solvePlanarPose(world, image, this.K);
     if (!pose || pose.error > MAX_POSE_ERROR_PX) return;
+    if (this.wantCamera && !pose.C) {
+      // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.
+      try {
+        const H = solveHomographyLS(world, image);
+        const f = focalFromHomography(H, this.inputW / 2, this.inputH / 2);
+        if (f) this._addFocalSample(f);
+        const { R, t } = decomposeHomography(H, this.Kreal);
+        pose.C = TrackingFusion.cameraCentre(R, t);
+      } catch (err) { /* keep the previous position */ }
+    }
     const raw = anchorMatrixFromMvt(this.controller, this.post, pose.mvt);
     const nowMs = performance.now();
     if (!this.tagPose || nowMs - this.tagPose.time > 500) this.filter.reset();
     const matrix = new THREE.Matrix4().fromArray(this.filter.filter(res.time, raw.elements));
-    this.tagPose = { matrix, time: nowMs, error: pose.error, ids };
+    this.tagPose = { matrix, time: nowMs, error: pose.error, ids, C: pose.C || null };
   }
 
   /**
@@ -293,7 +325,9 @@ export class TrackingFusion extends EventTarget {
     const projected = corners.map(([X, Y]) => projectPoint(R, t, K, X, Y, -this.wallOffset));
     if (projected.some((p) => !(p[2] > 0))) return null;
     const view = solvePlanarPose(corners, projected.map(([u, v]) => [u, v]), this.K);
-    return view && { mvt: view.mvt, error };
+    if (!view) return null;
+    const Cwall = TrackingFusion.cameraCentre(R, t);
+    return { mvt: view.mvt, error, C: [Cwall[0], Cwall[1], Cwall[2] + this.wallOffset] }; // picture plane is wallOffset in front
   }
 
   /** Accumulate a tag's corners on the wall (marker px) seen from the front; keep a robust median. */

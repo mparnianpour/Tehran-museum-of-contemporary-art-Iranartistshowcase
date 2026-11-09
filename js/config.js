@@ -52,6 +52,8 @@ export const SETUP_DEFAULTS = {
     missTolerance: 10,
     image: true, // false = hold the picture with AprilTags only (for plain surfaces image tracking can't recognise)
   },
+  // Pillars or walls in front of the picture that should hide it (see occlusion.js).
+  occluders: [],
   // Printed AprilTags (tag36h11) in the frame hold the picture at steep side angles.
   apriltag: {
     enabled: true,

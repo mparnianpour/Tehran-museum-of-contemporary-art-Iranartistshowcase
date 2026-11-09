@@ -233,7 +233,7 @@ export function slugify(text) {
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** The setup.json that the viewer reads. */
-export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [], wallOffset = 0 }) {
+export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [], wallOffset = 0, occluders = [] }) {
   const json = {
     name,
     target: 'target.mind',
@@ -253,6 +253,7 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
       margin: round(calibration.margin, 4),
       ignoreInside: !!calibration.ignoreInside,
       tagDepth: calibration.tagDepth ?? null,
+      sides: calibration.sides ?? null,
       created: new Date().toISOString().slice(0, 10),
     },
   };
@@ -261,6 +262,10 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
     // and how far that wall lies behind the opening's edge.
     json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map(([x, y]) => [round(x), round(y)]) })) };
     if (wallOffset > 0) json.apriltag.wallOffset = round(wallOffset, 2);
+  }
+  if (occluders.length) {
+    // Pillars / side walls in front of the picture (tracking-image px; near = how far they stand out).
+    json.occluders = occluders.map((o) => ({ box: o.box.map((v) => round(v, 1)), near: round(o.near, 2), far: round(o.far || 0, 2) }));
   }
   return json;
 }

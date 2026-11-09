@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { loadAppConfig, loadSetup, loadSlideshow, params } from './config.js';
 import { createOpeningGeometry, createDebugOutlines, createTagOutlines } from './frame-geometry.js';
 import { TrackingFusion } from './tracking-fusion.js';
+import { createOcclusion, MAX_OCCLUDERS, MAX_EDGES } from './occlusion.js';
 import { createSlideshowMaterial, EFFECTS } from './transitions.js';
 import { Slideshow } from './slideshow.js';
 import { getStrings, applyStrings } from './i18n.js';
@@ -104,8 +105,10 @@ function createPicture(renderer) {
   const { setup, show, cfg } = state;
   const a = setup.openingAspect;
   const b = setup.bleed || 0;
+  const meshAspect = (a * (1 + 2 * b)) / (1 + 2 * b * a);
+  state.occlusion = createOcclusion(setup, meshAspect);
   const material = createSlideshowMaterial({
-    frameAspect: (a * (1 + 2 * b)) / (1 + 2 * b * a),
+    frameAspect: meshAspect,
     background: show.settings.background,
     innerShadow: setup.innerShadow,
     exposure: setup.exposure,
@@ -235,15 +238,37 @@ async function startAR() {
   showControls();
   const scanning = $('scanning');
   if (cfg.ui.scanningHint) scanning.classList.remove('hidden');
+  const smoothCam = { C: null };
   runLoop(renderer, scene, camera, (dt) => {
     const r = fusion.update(performance.now(), dt * 1000);
     picture.visible = r.visible;
     if (r.visible) picture.matrix.copy(r.matrix);
+    if (state.occlusion) updateOcclusion(r.visible, r.camera, smoothCam, dt);
     state.trackingSource = r.source;
     state.viewAngle = r.angle;
     if (r.visible !== state.found) setFound(r.visible);
     if (cfg.ui.scanningHint) scanning.classList.toggle('hidden', r.visible);
   });
+}
+
+/** Hide the picture where pillars / walls stand in front of it, from where the phone is now. */
+function updateOcclusion(visible, C, smooth, dt) {
+  const occ = state.occlusion;
+  const u = state.material.uniforms;
+  if (!visible) {
+    occ.clear();
+    smooth.C = null;
+  } else if (!C) {
+    if (smooth.C) occ.update(smooth.C); // no fresh position this frame: keep the last one
+    else occ.clear();
+  } else {
+    const k = smooth.C ? Math.min(1, dt * 12) : 1; // light smoothing; tag poses arrive in steps
+    smooth.C = smooth.C ? smooth.C.map((v, i) => v + (C[i] - v) * k) : [...C];
+    occ.update(smooth.C);
+  }
+  for (let i = 0; i < MAX_OCCLUDERS * MAX_EDGES; i++) u.uOcc.value[i].set(occ.lines[i * 3], occ.lines[i * 3 + 1], occ.lines[i * 3 + 2]);
+  for (let k = 0; k < MAX_OCCLUDERS; k++) u.uOccCount.value[k] = occ.counts[k];
+  state.occlusionActive = Array.from(occ.counts).some((n) => n > 0);
 }
 
 /* ---------- preview mode (no camera) ---------- */

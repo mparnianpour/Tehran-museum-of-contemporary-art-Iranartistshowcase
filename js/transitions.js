@@ -57,6 +57,10 @@ const fragmentShader = /* glsl */ `
   uniform float uShadowSize;
   uniform float uExposure;
   uniform float uOpacity;
+  // Pillars / walls in front of the picture: up to 3 convex silhouettes of up to
+  // 8 edges each, as lines (nx, ny, c) in (u * aspect, v) space; inside >= 0.
+  uniform vec3 uOcc[24];
+  uniform float uOccCount[3];
 
   varying vec2 vUv;
 
@@ -174,7 +178,21 @@ const fragmentShader = /* glsl */ `
     sh = max(sh, 0.5 * (1.0 - smoothstep(0.0, uShadowSize * 0.6, uv.y)));
     col *= 1.0 - uShadowStrength * sh;
 
-    gl_FragColor = vec4(col, uOpacity);
+    // Leave the picture transparent where a real pillar or wall is in front of it.
+    float hidden = 0.0;
+    vec2 q = vec2(vUv.x * uFrameAspect, vUv.y);
+    for (int k = 0; k < 3; k++) {
+      if (uOccCount[k] < 0.5) continue;
+      float inside = 1.0;
+      for (int e = 0; e < 8; e++) {
+        if (float(e) >= uOccCount[k]) break;
+        vec3 L = uOcc[k * 8 + e];
+        inside *= smoothstep(-0.002, 0.002, dot(L.xy, q) + L.z);
+      }
+      hidden = max(hidden, inside);
+    }
+
+    gl_FragColor = vec4(col, uOpacity * (1.0 - hidden));
   }
 `;
 
@@ -205,6 +223,8 @@ export function createSlideshowMaterial({ frameAspect, background = '#ebe6dc', i
       uShadowSize: { value: innerShadow.size ?? 0.035 },
       uExposure: { value: exposure },
       uOpacity: { value: 1 },
+      uOcc: { value: Array.from({ length: 24 }, () => new THREE.Vector3()) },
+      uOccCount: { value: [0, 0, 0] },
     },
     vertexShader,
     fragmentShader,

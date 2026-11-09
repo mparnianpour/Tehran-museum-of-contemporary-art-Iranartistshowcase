@@ -65,6 +65,7 @@ function init() {
   $('ignore-inside').addEventListener('change', (e) => { st.ignoreInside = e.target.checked; changed(); });
   $('tag-depth').addEventListener('input', () => { mapTags(); refreshTagNote(); draw(); });
   $('tags-only').addEventListener('change', (e) => { st.tagsOnly = e.target.checked; st.tagsOnlyTouched = true; refreshTagNote(); });
+  for (const id of ['occ-left-depth', 'occ-left-overlap', 'occ-right-depth', 'occ-right-overlap']) $(id).addEventListener('input', refreshOccNote);
   bindSlider('bleed', (v) => { st.bleed = v; draw(); });
   bindSlider('shadow', (v) => { st.shadow = v; draw(); });
   bindSlider('exposure', (v) => { st.exposure = v; draw(); });
@@ -140,6 +141,10 @@ async function loadExisting(id) {
     st.margin = cal.margin ?? st.margin;
     st.ignoreInside = cal.ignoreInside ?? false;
     $('ignore-inside').checked = st.ignoreInside;
+    for (const side of ['left', 'right']) {
+      $(`occ-${side}-depth`).value = cal.sides?.[side]?.depth ?? '';
+      $(`occ-${side}-overlap`).value = cal.sides?.[side]?.overlap ?? '';
+    }
     st.tagsOnly = json.tracking?.image === false;
     st.tagsOnlyTouched = true;
     $('tags-only').checked = st.tagsOnly;
@@ -272,6 +277,41 @@ async function detectPhotoTags(photo) {
   mapTags();
   refreshTagNote();
   draw();
+}
+
+/** Pillars / side walls entered in step 6, in the units of the measured size. */
+function sideInputs() {
+  const num = (id) => { const v = parseFloat($(id).value); return v > 0 ? v : 0; };
+  const sides = {};
+  for (const side of ['left', 'right']) {
+    const depth = num(`occ-${side}-depth`);
+    if (depth > 0) sides[side] = { depth, overlap: num(`occ-${side}-overlap`) };
+  }
+  return sides;
+}
+
+/** Boxes (tracking-image px) for the viewer to hide the picture behind. Needs the measured size. */
+function occluderBoxes() {
+  const sides = sideInputs();
+  const size = measuredSize();
+  if (!size || !st.layout || !Object.keys(sides).length) return [];
+  const k = st.layout.openingWidth / size[0]; // px per unit
+  const [[ox0, oy0], , [ox1, oy1]] = st.layout.opening;
+  const ow = st.layout.openingWidth;
+  const oh = st.layout.openingHeight;
+  const far = 10; // "floor to ceiling" and "far out to the side": much bigger than the picture
+  const out = [];
+  if (sides.left) out.push({ box: [ox0 - far * ow, oy0 - far * oh, ox0 + sides.left.overlap * k, oy1 + far * oh], near: sides.left.depth * k, far: 0 });
+  if (sides.right) out.push({ box: [ox1 - sides.right.overlap * k, oy0 - far * oh, ox1 + far * ow, oy1 + far * oh], near: sides.right.depth * k, far: 0 });
+  return out;
+}
+
+function refreshOccNote() {
+  const sides = Object.keys(sideInputs());
+  const note = $('occ-note');
+  if (sides.length && !measuredSize()) note.innerHTML = '<b class="poor">Enter the size in step 3</b> so these distances can be used.';
+  else if (sides.length) note.textContent = `The ${sides.join(' and ')} side${sides.length > 1 ? 's' : ''} will hide the picture when seen from an angle.`;
+  else note.textContent = '"Covers the edge" is how much of the picture it hides when seen straight on; usually 0.';
 }
 
 /** How far the tags' wall is behind the opening's edge, in tracking-image pixels (0 if unknown). */
@@ -682,9 +722,11 @@ function currentSetupJson(name) {
       margin: st.layout.margin,
       ignoreInside: st.ignoreInside,
       tagDepth: parseFloat($('tag-depth').value) > 0 ? parseFloat($('tag-depth').value) : null,
+      sides: Object.keys(sideInputs()).length ? sideInputs() : null,
     },
     tags: st.tags,
     wallOffset: wallOffsetPx(),
+    occluders: occluderBoxes(),
   });
 }
 

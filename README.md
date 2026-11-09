@@ -91,8 +91,9 @@ When the frame or the wall behind it changes, make a new setup. You can do it al
 3. Enter the opening's **inner size** if you can measure it (any unit). Otherwise the shape is estimated from the photo. The *frame & wall* slider sets how much of the surroundings the phone uses to recognise the frame; more is better, up to the edge of the photo. **If the wall behind the frame may change**, keep the straightened image within the frame's outer edge, so only the frame is recognised. **Ignore what's inside the frame** (on by default) does the same for the opening.
 4. Adjust the **picture edge**, the **frame shadow** and the **brightness** while you watch the preview.
 5. **AprilTags (optional):** any tags in the photo, inside the frame or on the wall, are found and saved automatically. For tags on the wall, enter how far the frame's inner edge stands out from the wall (see below).
-6. **Compile** the tracking data. This takes about 10 seconds on a laptop. The tool shows the detected feature points and a rough tracking-quality rating.
-7. To try it, tap **Test AR on this device**. The setup is saved in this browser only, so it runs straight away without uploading anything. When you are happy with it, tap **Download setup (.zip)**, unzip it at the top of the site (it creates `setups/<id>/`), and commit it.
+6. **Pillars and walls (optional):** if a pillar or the side wall of an alcove stands out in front of the picture, enter how far it sticks out, for each side. The viewer then lets it hide the picture from the side, as it hides the real surface (see below).
+7. **Compile** the tracking data. This takes about 10 seconds on a laptop. The tool shows the detected feature points and a rough tracking-quality rating.
+8. To try it, tap **Test AR on this device**. The setup is saved in this browser only, so it runs straight away without uploading anything. When you are happy with it, tap **Download setup (.zip)**, unzip it at the top of the site (it creates `setups/<id>/`), and commit it.
 
 You can reopen an existing setup to adjust it: open *Edit an existing setup instead* and type its ID.
 
@@ -159,6 +160,16 @@ The tag positions found by the setup tool were within 0.5–0.8 px of the truth 
 
 **Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is the depth in tracking-image pixels. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
+### Pillars and walls that hide the picture
+
+Without them entered, the AR picture is drawn over everything, so seen from the side it would cover a pillar or alcove wall standing in front of the panel. Enter each side in the setup tool (step 6): how far it **sticks out** in front of the picture, and how much it **covers the edge** when seen straight on (usually 0).
+
+Every frame, the viewer works out which part of the panel each pillar or wall hides from where the phone is. It uses the phone's real position, found from the tags, and leaves that part of the picture see-through, so the real pillar stays in front. The measured size from step 3 is needed. In `setup.json` they are `occluders`: boxes in tracking-image pixels, with `near` as how far they stand out.
+
+In a simulated alcove (350 × 300 cm panel, a wall and a pillar each standing 100 cm out, camera at ±40°), the picture was drawn over the wall or pillar for **11%** of the hidden area with them entered, compared with **83%** without. The 11% is a thin edge band that lags slightly while the phone moves. It still covered 90% of the visible panel.
+
+Keep tags far enough in from the sides that a pillar doesn't hide them from the side, roughly as far in as the pillar sticks out.
+
 ---
 
 ## URL parameters
@@ -213,6 +224,7 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `innerShadow` | `strength` and `size` of the shadow the frame casts on the picture |
 | `tracking` | MindAR smoothing and tolerance settings |
 | `apriltag` | optional AprilTag settings; `tags`: each tag's ID and corners in tracking-image pixels; `wallOffset`: how far the tags' wall is behind the opening's edge (tracking-image pixels) |
+| `occluders` | pillars or walls in front of the picture: `box` [x0, y0, x1, y1] beside it and `near` (how far they stand out), in tracking-image pixels |
 | `calibration` | the photo, corners and margin it was made from, so the tool can reopen it |
 
 ## About `setups/frame-01`
@@ -259,6 +271,7 @@ js/tracking-fusion.js          chooses image tracking or AprilTags; learns tag p
 js/tag-detector.js, apriltag-worker.js  AprilTag detection off the main thread
 js/tag-pose.js                 maps tag corners to the picture's position, in MindAR's terms
 js/camera.js                   real 3D camera maths: focal length from tags, pose, depth
+js/occlusion.js                which part of the picture a pillar or wall hides, from where the phone is
 apriltag.html                  printable AprilTags
 setups/<id>/                   one folder per frame setup
 artworks/                      slideshow images

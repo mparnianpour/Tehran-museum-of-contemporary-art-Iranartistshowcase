@@ -106,8 +106,22 @@
         <p class="note">For plain surfaces that image tracking can't recognise. Switched on automatically when step 6 rates tracking <i>Poor</i>. The tags must be in the photo.</p>
       </section>
 
+      <section class="step" id="step-occluders" data-needs="corners">
+        <h2><span class="num">6</span> Pillars and walls (optional)</h2>
+        <p class="help">If a pillar or the side wall of an alcove stands out in front of the picture, the viewer can let it hide the picture from the side, just as it hides the real surface. Use the same unit as the size in step 3.</p>
+        <div class="row">
+          <label>Left side: sticks out in front by <input type="number" id="occ-left-depth" min="0" step="any" inputmode="decimal" placeholder="—"></label>
+          <label>covers the picture's edge by <input type="number" id="occ-left-overlap" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        </div>
+        <div class="row">
+          <label>Right side: sticks out in front by <input type="number" id="occ-right-depth" min="0" step="any" inputmode="decimal" placeholder="—"></label>
+          <label>covers the picture's edge by <input type="number" id="occ-right-overlap" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+        </div>
+        <p class="note" id="occ-note">"Covers the edge" is how much of the picture it hides when seen straight on; usually 0.</p>
+      </section>
+
       <section class="step" id="step-compile" data-needs="corners">
-        <h2><span class="num">6</span> Compile tracking data</h2>
+        <h2><span class="num">7</span> Compile tracking data</h2>
         <p class="help">Analyses the straightened image so phones can recognise the frame. Takes 10–60 seconds.</p>
         <button type="button" class="button primary" id="compile">Compile</button>
         <div class="progress hidden" id="compile-progress"><span></span></div>
@@ -116,7 +130,7 @@
       </section>
 
       <section class="step" id="step-save" data-needs="compiled">
-        <h2><span class="num">7</span> Save &amp; test</h2>
+        <h2><span class="num">8</span> Save &amp; test</h2>
         <div class="row stack">
           <label>Setup ID (folder name) <input type="text" id="setup-id" placeholder="frame-02" autocomplete="off" spellcheck="false"></label>
           <label>Display name <input type="text" id="setup-name" placeholder="Gold frame, gallery 3"></label>
