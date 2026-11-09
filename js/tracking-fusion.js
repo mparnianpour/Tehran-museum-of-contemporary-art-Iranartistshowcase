@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import { TagDetector } from './tag-detector.js';
-import { solveHomographyLS } from './homography.js';
+import { solveHomography, solveHomographyLS } from './homography.js';
 import {
   solvePlanarPose, anchorMatrixFromMvt, mvtFromAnchorMatrix, imageToMarker, viewAngle, OneEuroMatrixFilter,
   cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
@@ -45,6 +45,10 @@ const UPRIGHT_MAX_VIEW_DEG = 75; // single-tag answers further round to the side
 const MOTION_HOLD_MS = 8000; // after the tags leave the screen, keep the picture in place from the phone's turning this long
 const MOTION_TURN_DEG = 1.5; // once the phone has turned this much since the last tag reading, follow the turn instead
 const SENSOR_MISMATCH_LIMIT = 5; // the motion sensor disagreeing with the tags this often: stop using it
+// A panel outline is only trusted if, in the phone's estimated lens, its sides come out this close to
+// square to each other and to the picture's proportions (otherwise it's something else, or partly hidden).
+const OUTLINE_MAX_SKEW = 0.12; // |cos| of the angle between its sides
+const OUTLINE_MAX_ASPECT_ERROR = 0.12;
 const FOCAL_SAMPLES = 40; // focal-length estimates kept (median used)
 const DEFAULT_FOCAL = 0.75; // x the camera image's long side, typical for phone main cameras
 // The lens can only be read from perspective that's big enough to measure: a tag ~50 px across
@@ -219,6 +223,8 @@ export class TrackingFusion extends EventTarget {
     const tagsOnly = this.setup.tracking?.image === false;
     this.detector = new TagDetector({ family: this.cfg.family || 'tag36h11', maxSize: tagsOnly ? 1920 : 1280 });
     this.minInterval = 1000 / (this.cfg.maxRate || 20);
+    // A plain, bright panel with clear edges all round (setup.json "outline"): track its outline too.
+    this.outlineEnabled = !!this.setup.outline?.enabled;
     if (this.known.size) this.dispatchEvent(new Event('tagschange'));
   }
 
@@ -239,13 +245,17 @@ export class TrackingFusion extends EventTarget {
 
     // Look for tags when they can be used now, or learned from the current view.
     if (this.detector && !this.detector.busy && now - this.lastDetect >= this.minInterval && this._videoReady()
-      && (this.known.size > 0 || (this.cfg.learn && imageVisible))) {
+      && (this.known.size > 0 || this.outlineEnabled || (this.cfg.learn && imageVisible))) {
       this.lastDetect = now;
       const imageAtGrab = imageVisible ? imageMatrix.clone() : null;
       const sensors = this.sensorsOk;
       const downAtGrab = sensors && this.gravity ? this.gravity() : null;
       const orientAtGrab = sensors && this.motion ? this.motion() : null;
-      this.detector.detect(this.mindar.video).then((res) => res && this._onDetections(res, imageAtGrab, downAtGrab, orientAtGrab));
+      const opts = {
+        tags: this.known.size > 0 || (this.cfg.learn && imageVisible),
+        outline: this.outlineEnabled ? { roll: downAtGrab ? Math.atan2(downAtGrab[0], downAtGrab[1]) : 0 } : null,
+      };
+      this.detector.detect(this.mindar.video, opts).then((res) => res && this._onDetections(res, imageAtGrab, downAtGrab, orientAtGrab));
     }
 
     let tagFresh = !!this.tagPose && now - this.tagPose.time < this.tagFreshMs;
@@ -292,7 +302,8 @@ export class TrackingFusion extends EventTarget {
       const { R, t } = this._poseFromImage(imageMatrix);
       camera = TrackingFusion.cameraCentre(R, t);
     }
-    return { visible: this.visible, matrix: this.output, source, angle: this.angle, camera };
+    const shown = source === 'tag' && this.tagPose?.ids[0] === 'outline' ? 'outline' : source; // for the debug readout
+    return { visible: this.visible, matrix: this.output, source: shown, angle: this.angle, camera };
   }
 
   _onDetections(res, imageAtGrab, down = null, orient = null) {
@@ -323,41 +334,59 @@ export class TrackingFusion extends EventTarget {
       }
     }
 
-    const world = [];
-    const image = [];
-    const ids = [];
-    for (const m of markers) {
-      const known = this.known.get(m.id);
-      if (!known) continue;
-      known.corners.forEach((c, i) => {
-        world.push(c);
-        image.push(m.corners[i]);
-      });
-      ids.push(m.id);
+    // A plain bright panel seen whole: its own corners place the picture exactly, with no lens needed.
+    let pose = null;
+    let ids = [];
+    for (const cand of res.outlines || []) {
+      if (cand.partial) continue;
+      pose = this._outlinePose(cand.corners);
+      if (pose) {
+        ids = ['outline'];
+        break;
+      }
     }
-    if (world.length < 4) return;
-    // When every tag in view lies on the picture's own surface, the flat mapping is exact and
-    // needs no lens; the 3D solve is only for tags off the surface (at an angle, on a pillar...).
-    const ow = Math.abs(this.setup.opening[1][0] - this.setup.opening[0][0]) || 1;
-    const offSurface = this.tags3d && markers.some((m) => this.known.has(m.id)
-      && this._corners3d(this.known.get(m.id)).some((c) => Math.abs(c[2]) > 0.005 * ow));
-    // One tag alone tilts the far side of a large picture with every small error in its own tilt;
-    // when the phone says which way is down, solve in 3D with the picture kept upright.
-    const upright = !!down && ids.length === 1;
-    const use3D = offSurface || upright;
-    const pose = use3D
-      ? this._pose3D(markers.filter((m) => this.known.has(m.id)), upright ? down : null)
-      : solvePlanarPose(world.map((c) => [c[0], c[1]]), image, this.K);
-    if (!pose || pose.error > (use3D ? MAX_POSE_ERROR_3D_PX : MAX_POSE_ERROR_PX)) return;
-    if (this.wantCamera && !pose.C) {
-      // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.
-      try {
-        const H = solveHomographyLS(world, image);
-        const f = imageSpan(image) >= FOCAL_MIN_SPAN_PX ? focalFromHomography(H, this.inputW / 2, this.inputH / 2) : null;
-        if (f) this._addFocalSample(f);
-        const { R, t } = decomposeHomography(H, this.Kreal);
-        pose.C = TrackingFusion.cameraCentre(R, t);
-      } catch (err) { /* keep the previous position */ }
+    if (!pose) {
+      const tagIds = [];
+      pose = (() => {
+        const world = [];
+        const image = [];
+        for (const m of markers) {
+          const known = this.known.get(m.id);
+          if (!known) continue;
+          known.corners.forEach((c, i) => {
+            world.push(c);
+            image.push(m.corners[i]);
+          });
+          tagIds.push(m.id);
+        }
+        if (world.length < 4) return null;
+        // When every tag in view lies on the picture's own surface, the flat mapping is exact and
+        // needs no lens; the 3D solve is only for tags off the surface (at an angle, on a pillar...).
+        const ow = Math.abs(this.setup.opening[1][0] - this.setup.opening[0][0]) || 1;
+        const offSurface = this.tags3d && markers.some((m) => this.known.has(m.id)
+          && this._corners3d(this.known.get(m.id)).some((c) => Math.abs(c[2]) > 0.005 * ow));
+        // One tag alone tilts the far side of a large picture with every small error in its own tilt;
+        // when the phone says which way is down, solve in 3D with the picture kept upright.
+        const upright = !!down && tagIds.length === 1;
+        const use3D = offSurface || upright;
+        const pose = use3D
+          ? this._pose3D(markers.filter((m) => this.known.has(m.id)), upright ? down : null)
+          : solvePlanarPose(world.map((c) => [c[0], c[1]]), image, this.K);
+        if (!pose || pose.error > (use3D ? MAX_POSE_ERROR_3D_PX : MAX_POSE_ERROR_PX)) return null;
+        if (this.wantCamera && !pose.C) {
+          // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.
+          try {
+            const H = solveHomographyLS(world, image);
+            const f = imageSpan(image) >= FOCAL_MIN_SPAN_PX ? focalFromHomography(H, this.inputW / 2, this.inputH / 2) : null;
+            if (f) this._addFocalSample(f);
+            const { R, t } = decomposeHomography(H, this.Kreal);
+            pose.C = TrackingFusion.cameraCentre(R, t);
+          } catch (err) { /* keep the previous position */ }
+        }
+        return pose;
+      })();
+      if (!pose) return;
+      ids = tagIds;
     }
     const raw = anchorMatrixFromMvt(this.controller, this.post, pose.mvt);
     const nowMs = performance.now();
@@ -398,12 +427,12 @@ export class TrackingFusion extends EventTarget {
       } catch (err) { /* degenerate view of this tag */ }
       const q = m.corners;
       const area = Math.abs((q[0][0] - q[2][0]) * (q[1][1] - q[3][1]) - (q[1][0] - q[3][0]) * (q[0][1] - q[2][1])) / 2;
-      if (area > bestArea) { bestArea = area; best = { m, frame }; }
+      if (area > bestArea) { bestArea = area; best = { m, frame, c3 }; }
     }
     if (!best) return null;
     const K = this.Kreal;
     // Start from the biggest tag in view, and from the last pose if recent; keep the better fit.
-    const starts = [poseFromTag(best.m.corners, best.frame, K)];
+    const starts = [poseFromTag(best.m.corners, best.frame, K, best.c3)];
     if (this.lastRigid && performance.now() - this.lastRigid.time < 600) starts.push(this.lastRigid);
     let fit = null;
     for (const s0 of starts) {
@@ -459,6 +488,42 @@ export class TrackingFusion extends EventTarget {
     const near = [th0];
     if (recent) near.push(uprightAngle(R0, recent.R));
     return solve(near) || solve([-60, -40, -20, 20, 40, 60].map((d) => th0 + (d * Math.PI) / 180));
+  }
+
+  /**
+   * Pose from the panel's outline (its four corners in the camera image), or null if the outline doesn't
+   * have the picture's shape, or the phone is where a pillar or side wall could be hiding part of it.
+   */
+  _outlinePose(corners) {
+    const op = this.setup.opening;
+    let H;
+    try {
+      H = solveHomography(op, corners);
+    } catch (err) {
+      return null;
+    }
+    const K = this.Kreal;
+    const [f, cx, cy] = [K[0][0], K[0][2], K[1][2]];
+    const a1 = [(H[0] - cx * H[6]) / f, (H[3] - cy * H[6]) / f, H[6]];
+    const a2 = [(H[1] - cx * H[7]) / f, (H[4] - cy * H[7]) / f, H[7]];
+    const n1 = Math.hypot(...a1);
+    const n2 = Math.hypot(...a2);
+    if (!(n1 > 0 && n2 > 0)) return null;
+    const skew = Math.abs(a1[0] * a2[0] + a1[1] * a2[1] + a1[2] * a2[2]) / (n1 * n2);
+    if (skew > OUTLINE_MAX_SKEW || Math.abs(n1 / n2 - 1) > OUTLINE_MAX_ASPECT_ERROR) return null;
+    const { R, t } = decomposeHomography(H, K);
+    const C = TrackingFusion.cameraCentre(R, t);
+    const ow = Math.abs(op[1][0] - op[0][0]);
+    if (!(C[2] < 0) || -C[2] > 20 * ow) return null;
+    // Outside the space between the pillar and the side wall, one of them may hide an edge of the panel.
+    if ((this.setup.occluders || []).length && (C[0] < Math.min(op[0][0], op[3][0]) || C[0] > Math.max(op[1][0], op[2][0]))) return null;
+    const view = solvePlanarPose(op, corners, this.K);
+    if (!view) return null;
+    if (imageSpan(corners) >= FOCAL_MIN_SPAN_PX) {
+      const fs = focalFromHomography(H, this.inputW / 2, this.inputH / 2);
+      if (fs) this._addFocalSample(fs);
+    }
+    return { mvt: view.mvt, error: 0, C, R };
   }
 
   get sensorsOk() {

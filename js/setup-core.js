@@ -382,7 +382,7 @@ export function slugify(text) {
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
 /** The setup.json that the viewer reads. */
-export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [], wallOffset = 0, occluders = [] }) {
+export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, exposure, tracking, calibration, tags = [], wallOffset = 0, occluders = [], outline = false }) {
   const json = {
     name,
     target: 'target.mind',
@@ -418,6 +418,7 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
     // Pillars / side walls in front of the picture (tracking-image px; near = how far they stand out).
     json.occluders = occluders.map((o) => ({ box: o.box.map((v) => round(v, 1)), near: round(o.near, 2), far: round(o.far || 0, 2) }));
   }
+  if (outline) json.outline = { enabled: true }; // plain bright panel: also held by its own outline
   return json;
 }
 

@@ -181,7 +181,35 @@ The test machine processes only about 12–15 frames per second, so it shows mor
 
 The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. Tags on the wall's edge and the pillar, turned 40° and 1 m in front of the panel, were placed in 3D to within 1.2–1.5 cm. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `gravity` (`true`: use the phone's motion sensor when the setup has a single tag), `motionHold` (`8000` ms: how long the motion sensor keeps the picture in place after the tag leaves the screen; `0` turns this off), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `gravity` (`true`: use the phone's motion sensor when the setup has a single tag), `motionHold` (`8000` ms: how long the motion sensor keeps the picture in place after the tag leaves the screen; `0` turns this off), `tags` and `wallOffset`. The panel outline is set separately: `"outline": { "enabled": true }`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+
+### Without tags: the panel's outline
+
+A plain panel that is clearly **brighter than everything around it**, such as a lit or backlit sheet with all four edges visible, can hold the picture by its own outline. Turn it on in the setup tool, step 5, with **Also hold the picture by the panel's outline**, or with `"outline": { "enabled": true }` in `setup.json`.
+
+**How it works:**
+
+- **Finding the panel:** in each camera frame the viewer finds the largest bright, four-sided region and fits a straight line along each side, accurate to a fraction of a pixel. The four corners then place the picture exactly, with no lens guess needed.
+- **Checks:** an outline is only used if all of these hold:
+  - **Whole panel on screen:** no side runs along the screen's edge.
+  - **Even brightness:** it's evenly bright from side to side. A lit side wall taken in by mistake shows as a darker strip; a soft shadow band across the panel is fine.
+  - **Right shape:** it has the panel's proportions and square corners.
+  - **Unblocked view:** the phone is between the pillar and the side wall. From further to the side, one of them hides an edge of the panel, so the outline would be wrong.
+- **Bonus:** when the outline is used, it also teaches the viewer the phone's lens, which helps the tags.
+- **Motion sensor:** if the setup has an outline (or a single tag), the viewer also asks for the phone's motion sensor. Once the outline has placed the picture, the sensor keeps it in place for up to 8 seconds while the visitor pans across the panel or steps closer, until the whole panel is in view again.
+
+**Tested:**
+
+- **Real photos:**
+  - **Straight-on photo showing the whole panel:** placed within **0.5%** of the panel's width on average, 1.4% at worst.
+  - **Three other photos, correctly rejected:**
+    - one with the panel's top cut off
+    - one close-up showing only part of the panel
+    - one from the side, where the lit side wall nearly matched the panel and the pillar hid part of it
+- **Simulated alcove** with the brightness of the real one: 350 × 300 cm panel, phone 7 m back, **no tag**:
+  - **Panel only:** in front (up to about 20° to the side) the picture was held within 1.7–4.6% (2.4% median). Further round it isn't shown without a tag.
+  - **With one tag on the pillar:** the outline held the front views and the tag the side views (6–8% without the motion sensor).
+- **Whole panel in view, then turned 30° so part of it was off screen:** held all the time, 3.4% off (median) with the viewer's lens guess.
 
 ### Pillars and walls that hide the picture
 
@@ -210,6 +238,7 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `controls`, `caption`, `effectPicker`, `navigation`, `swipe` | `?controls=0` | show or hide parts of the interface |
 | `bleed`, `exposure` | `?bleed=0.01` | adjust the picture edge or brightness |
 | `filterMinCF`, `filterBeta` | `?filterBeta=0.05` | tracking smoothing (see below) |
+| `outline` | `?outline=0` | turn holding by the panel's outline off (or on with `1`) |
 | `apriltag`, `learn`, `obliqueAngle`, `gravity`, `motionHold` | `?apriltag=0` | turn AprilTag holding, learning or the motion sensor off, change the switch-over angle, or how long the picture is held after the tag leaves the screen (ms) |
 | `debug` | `?debug=1` | outlines the tracking image, opening and tags, and shows what is holding the picture |
 
@@ -247,27 +276,31 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `innerShadow` | `strength` and `size` of the shadow the frame casts on the picture |
 | `tracking` | MindAR smoothing and tolerance settings |
 | `apriltag` | optional AprilTag settings; `tags`: each tag's ID and corners in tracking-image pixels; `wallOffset`: how far the tags' wall is behind the opening's edge (tracking-image pixels) |
+| `outline` | `{ "enabled": true }`: also hold the picture by a plain bright panel's own outline |
 | `occluders` | pillars or walls in front of the picture: `box` [x0, y0, x1, y1] beside it and `near` (how far they stand out), in tracking-image pixels |
 | `calibration` | the photo, corners and margin it was made from, so the tool can reopen it |
 
 ## About `setups/frame-01`
 
-This is the **cream panel** in the alcove, with **tag 1** on the concrete pillar to its right. Nothing was measured on site. The panel's shape and the depths were reconstructed from two photos taken with the same phone; their EXIF data gives the 23 mm lens.
+This is the **cream panel** in the alcove, with **tag 1** on the concrete pillar to its right. It holds the picture in two ways:
 
-- `photo.jpg`, the wide view of the alcove, shows the panel's top edge. The tracking image is made from it.
-- `photo-front.jpg`, the straight-on view, shows the panel's sides and bottom, the side wall, the pillar and the tag. Its top edge is just out of the picture.
-- **Result:** the panel is **1.09** times as wide as it is tall. The side wall stands **0.37** panel widths in front of it, and the pillar **0.33**. The tag is placed in 3D on the pillar's front, exactly as it appears in `photo-front.jpg`.
-- **Checks:** with the 23 mm lens, the panel's vertical and horizontal edges in the wide photo come out 91.6° apart (90° is perfect). The pillar depth found from one photo predicts where the pillar's edge appears in the other to within a few pixels.
+- **From in front, with no tag needed:** by the panel's own outline (see *Without tags* above).
+- **From the sides:** by the tag, kept upright by the phone's motion sensor.
 
-**The test tag is too small to hold the panel.** From where `photo-front.jpg` was taken, it's about 28 px across in a phone's HD camera image. Seen nearly straight on, a square that small barely changes shape when it's turned. So the viewer can't tell how the pillar is turned, and the panel is a whole panel-width away from the tag. Tested on both photos, the viewer's single-tag solve placed the panel 20–46% of its width off, although the tag model itself matches the photo to 0.4 px. Also, the paper doesn't lie flat: it stands off the pillar along its left and bottom edges.
+`photo.jpg` is the straight-on photo it was made from. Nothing was measured on site; everything was worked out from that photo and its 23 mm lens (from its EXIF data):
 
-**To finish it:**
+- **The panel:** 1.11 times as wide as it is tall. As a check on the lens, the panel's edges come out 90.25° apart (90° is perfect).
+- **The side wall and the pillar:** they stand **0.36** and **0.33** panel widths in front of the panel. Both hide the picture when seen from the side.
+- **The tag:** placed in 3D on the pillar's front, as photographed. It's about 0.05 panel widths across, roughly 16 cm if the panel is 3.4 m wide. Like the earlier print, it comes out about 5% wider than tall from every angle, so the printout is probably slightly stretched. The viewer now starts from the tag's real shape rather than assuming a square.
+- **Agreement with earlier photos:** a reconstruction from two earlier photos gave 1.09, 0.37 and 0.33 for the same three numbers.
 
-1. Print tag **1** at **300 mm** or larger (`apriltag.html`, A2 or bigger) and fix it **flat** on the pillar's front, at about the panel's mid-height. In simulation, a 30 cm tag there held the picture within 2–5% of the panel's width.
-2. Take one more photo like `photo-front.jpg`: straight on, but with the panel's top edge in it too, and the new tag. Landscape is fine.
-3. The tag is then placed again from that photo. The panel's shape and the depths above stay as they are.
+**Tests on that photo, with the phone's camera image at 1920 px:**
 
-**Visitors holding the phone upright (portrait):** an upright phone sees a narrow strip, about 0.85 times as wide as its distance. To have the whole panel and the code on the pillar on screen together, stand about **1.7 panel widths** back. From closer, the picture appears as soon as the code is on screen, and then stays in place for up to 8 seconds while the visitor pans across the panel. The scanning hint asks visitors to keep the code in view. The panel's top and bottom fit easily, since an upright phone sees much more height than width.
+- **Outline:** found the panel and placed it within **0.5%** of its width on average (1.4% at worst).
+- **Tag alone, from the same spot:** placed the panel within **0.3%** with the phone's lens known and **0.8%** with the viewer's lens guess, when the motion sensor was used; without it, 4–5%. The earlier, smaller tag was 16–20% off.
+- **Caveat:** these are from the spot where the photo was taken; there's no photo of the new tag from another angle yet.
+
+**Visitors holding the phone upright (portrait):** an upright phone sees a strip about 0.85 times as wide as its distance. To see the whole panel, so the outline can hold the picture, stand about **1.3 panel widths** back. From closer, the picture appears when the code on the pillar is on screen, and then stays in place for up to 8 seconds while the visitor pans. The panel's top and bottom fit easily, since an upright phone sees much more height than width.
 
 ## Files
 
@@ -284,7 +317,7 @@ js/homography.js               perspective maths
 js/local-store.js              on-device storage for test setups
 js/i18n.js                     English and Persian interface text
 js/tracking-fusion.js          chooses image tracking or AprilTags; learns tag positions
-js/tag-detector.js, apriltag-worker.js  AprilTag detection off the main thread
+js/tag-detector.js, apriltag-worker.js  AprilTag and panel-outline detection off the main thread
 js/tag-pose.js                 maps tag corners to the picture's position, in MindAR's terms
 js/camera.js                   real 3D camera maths: focal length from tags, pose, depth
 js/occlusion.js                which part of the picture a pillar or wall hides, from where the phone is

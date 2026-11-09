@@ -148,10 +148,21 @@ export function squareFrame(c) {
   return { origin: c[0], ex, ey, ez: cross(ex, ey), size };
 }
 
-/** Pose (R row-major 9, t) of a picture-frame from a square tag seen at imageCorners, given its 3D frame. */
-export function poseFromTag(imageCorners, frame, K) {
+/**
+ * Pose (R row-major 9, t) of a picture-frame from a tag seen at imageCorners, given its 3D frame.
+ * With corners3d (the tag's own 3D corners), its real shape in its plane is used, so a print
+ * that came out slightly stretched isn't explained away as a tilted square.
+ */
+export function poseFromTag(imageCorners, frame, K, corners3d = null) {
   const s = frame.size;
-  const H = solveHomography4([[0, 0], [s, 0], [s, s], [0, s]], imageCorners);
+  const o = frame.origin;
+  const planar = corners3d
+    ? corners3d.map((c) => {
+      const d = [c[0] - o[0], c[1] - o[1], c[2] - o[2]];
+      return [d[0] * frame.ex[0] + d[1] * frame.ex[1] + d[2] * frame.ex[2], d[0] * frame.ey[0] + d[1] * frame.ey[1] + d[2] * frame.ey[2]];
+    })
+    : [[0, 0], [s, 0], [s, s], [0, s]];
+  const H = solveHomography4(planar, imageCorners);
   const { R: Rt, t: tt } = decomposeHomography(H, K); // tag-local -> camera
   // picture -> tag-local: Xl = M^T (Xp - o), with M = [ex ey ez] as columns
   const M = [frame.ex, frame.ey, frame.ez];
@@ -159,7 +170,6 @@ export function poseFromTag(imageCorners, frame, K) {
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) Rp[r * 3 + c] = Rt[r * 3] * M[0][c] + Rt[r * 3 + 1] * M[1][c] + Rt[r * 3 + 2] * M[2][c];
   }
-  const o = frame.origin;
   const tp = [0, 1, 2].map((r) => tt[r] - (Rp[r * 3] * o[0] + Rp[r * 3 + 1] * o[1] + Rp[r * 3 + 2] * o[2]));
   return { R: Rp, t: tp, H };
 }

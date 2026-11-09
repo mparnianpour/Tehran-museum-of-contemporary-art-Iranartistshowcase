@@ -29,10 +29,11 @@ export class TagDetector {
 
   /**
    * Detect tags in the current frame of source (video, canvas or image).
-   * Resolves to { time, width, height, markers } or null; resolves null at
-   * once if a frame is already being processed.
+   * Resolves to { time, width, height, markers, outlines } or null; resolves
+   * null at once if a frame is already being processed.
+   * Options: tags (default true); outline: { roll } to also look for a plain bright panel's outline.
    */
-  detect(source) {
+  detect(source, { tags = true, outline = null } = {}) {
     if (this.busy || this.failed) return Promise.resolve(null);
     const sw = source.videoWidth || source.naturalWidth || source.width;
     const sh = source.videoHeight || source.naturalHeight || source.height;
@@ -54,13 +55,13 @@ export class TagDetector {
     return new Promise((resolve) => {
       this.pending.set(seq, { resolve, scale, time, width: sw, height: sh });
       this.worker.postMessage(
-        { seq, width: w, height: h, buffer, family: this.family, maxHamming: this.maxHamming },
+        { seq, width: w, height: h, buffer, family: this.family, maxHamming: this.maxHamming, tags, outline },
         [buffer],
       );
     });
   }
 
-  _onMessage({ seq, markers, error }) {
+  _onMessage({ seq, markers, outlines, error }) {
     this.busy = false;
     const p = this.pending.get(seq);
     if (!p) return;
@@ -72,6 +73,7 @@ export class TagDetector {
       width: p.width,
       height: p.height,
       markers: (markers || []).map((m) => ({ ...m, corners: m.corners.map(([x, y]) => [x * inv, y * inv]) })),
+      outlines: (outlines || []).map((o) => ({ ...o, corners: o.corners.map(([x, y]) => [x * inv, y * inv]) })),
     });
   }
 

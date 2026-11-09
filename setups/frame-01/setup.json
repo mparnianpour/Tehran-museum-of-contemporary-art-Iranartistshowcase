@@ -2,9 +2,9 @@
   "name": "Cream panel in the alcove",
   "target": "target.mind",
   "preview": "target.jpg",
-  "targetSize": [1024, 956],
-  "opening": [[99.1, 99.1], [924.9, 99.1], [924.9, 857.19], [99.1, 857.19]],
-  "openingAspect": 1.08932,
+  "targetSize": [1024, 921],
+  "opening": [[4.56, 4.56], [1019.44, 4.56], [1019.44, 916.94], [4.56, 916.94]],
+  "openingAspect": 1.11235,
   "bleed": 0,
   "exposure": 1,
   "innerShadow": {
@@ -23,44 +23,46 @@
     "tags": [
       {
         "id": 1,
-        "corners": [[1009.58, 560.44, -269.79], [1030.23, 560.6, -269.79], [1030.45, 579.57, -269.79], [1009.82, 579.05, -269.79]]
+        "corners": [[1105.24, 557.91, -330.55], [1155.89, 563.21, -330.55], [1149.28, 609.38, -330.55], [1099.67, 603.07, -330.55]]
       }
     ]
   },
+  "outline": {
+    "enabled": true
+  },
   "occluders": [
     {
-      "box": [-8159, -7481.8, 99.1, 8438.1],
-      "near": 302.49,
+      "box": [-10144.2, -9119.2, 4.6, 10040.7],
+      "near": 363.02,
       "far": 0
     },
     {
-      "box": [924.9, -7481.8, 9183, 8438.1],
-      "near": 269.79,
+      "box": [1019.4, -9119.2, 11168.2, 10040.7],
+      "near": 330.55,
       "far": 0
     }
   ],
   "calibration": {
     "photo": "photo.jpg",
-    "photoSize": [1109, 2400],
-    "corners": [[0.26187, 0.31069], [0.87522, 0.27591], [0.86197, 0.60236], [0.27742, 0.56781]],
-    "openingSize": [1, 0.918],
-    "margin": 0.12,
+    "photoSize": [2400, 1109],
+    "corners": [[0.18383, 0.00487], [0.66791, 0.01635], [0.6815, 0.92585], [0.18795, 0.9879]],
+    "openingSize": [1, 0.899],
+    "margin": 0.0045,
     "ignoreInside": true,
     "tagDepth": null,
     "sides": {
       "left": {
-        "depth": 0.3663,
+        "depth": 0.3577,
         "overlap": 0
       },
       "right": {
-        "depth": 0.3267,
+        "depth": 0.3257,
         "overlap": 0
       }
     },
     "tagSize": null,
     "photoFocal35": 23,
     "created": "2026-11-09",
-    "tagPhoto": "photo-front.jpg",
-    "notes": "Panel shape and the pillar/wall depths reconstructed from two photos (23 mm lens): width/height 1.089; side wall 0.366 and pillar 0.327 panel widths in front. Tag 1 placed in 3D from photo-front.jpg, on the pillar front. Not measured on site."
+    "notes": "Panel shape and the pillar/wall depths reconstructed from photo.jpg (23 mm lens, panel edges 90.25 deg apart): width/height 1.113; side wall 0.358 and pillar 0.326 panel widths in front. Tag 1 placed in 3D on the pillar front as photographed. Not measured on site."
   }
 }

@@ -30,6 +30,7 @@ const st = {
   ignoreInside: true, // flatten the opening so what's inside the frame can't affect tracking
   tagsOnly: false, // plain surface: hold the picture with AprilTags only
   tagsOnlyTouched: false, // the user set it, so don't change it automatically
+  outline: false, // plain bright panel: also hold the picture by its outline
   photoTags: [], // AprilTags found in the photo: [{ id, corners }] in photo pixels
   photoFocal35: null, // the photo's 35 mm-equivalent focal length (EXIF), if known
   tag3d: null, // { focal, focalFrom } when tags were placed in 3D
@@ -71,6 +72,7 @@ function init() {
   $('tag-depth').addEventListener('input', () => { mapTags(); refreshTagNote(); draw(); });
   for (const id of ['tag-size', 'tags-upright']) $(id).addEventListener(id === 'tag-size' ? 'input' : 'change', () => { mapTags(); refreshTagNote(); draw(); });
   $('tags-only').addEventListener('change', (e) => { st.tagsOnly = e.target.checked; st.tagsOnlyTouched = true; refreshTagNote(); });
+  $('outline').addEventListener('change', (e) => { st.outline = e.target.checked; });
   for (const id of ['occ-left-depth', 'occ-left-overlap', 'occ-right-depth', 'occ-right-overlap']) $(id).addEventListener('input', refreshOccNote);
   bindSlider('bleed', (v) => { st.bleed = v; draw(); });
   bindSlider('shadow', (v) => { st.shadow = v; draw(); });
@@ -156,6 +158,8 @@ async function loadExisting(id) {
     st.tagsOnly = json.tracking?.image === false;
     st.tagsOnlyTouched = true;
     $('tags-only').checked = st.tagsOnly;
+    st.outline = !!json.outline?.enabled;
+    $('outline').checked = st.outline;
     $('tag-depth').value = cal.tagDepth ?? '';
     st.bleed = json.bleed ?? 0;
     st.shadow = json.innerShadow?.strength ?? st.shadow;
@@ -754,6 +758,7 @@ function currentSetupJson(name) {
     tags: st.tags,
     wallOffset: st.tag3d ? 0 : wallOffsetPx(),
     occluders: occluderBoxes(),
+    outline: st.outline,
   });
 }
 

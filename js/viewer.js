@@ -176,7 +176,8 @@ async function startAR() {
   // A single tag holds the picture better when the phone says which way is down. Ask for the
   // motion sensor while still inside the tap (iPhones only allow it then); with two or more
   // tags it isn't needed, so visitors aren't asked.
-  const useMotion = setup.apriltag.enabled && setup.apriltag.gravity !== false && (setup.apriltag.tags || []).length === 1;
+  const useMotion = setup.apriltag.enabled && setup.apriltag.gravity !== false
+    && ((setup.apriltag.tags || []).length === 1 || !!setup.outline?.enabled);
   if (useMotion) {
     requestMotionPermission();
     startMotion(); // without permission no readings arrive, and tags work as before

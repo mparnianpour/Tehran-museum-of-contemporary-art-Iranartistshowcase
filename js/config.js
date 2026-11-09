@@ -54,6 +54,8 @@ export const SETUP_DEFAULTS = {
   },
   // Pillars or walls in front of the picture that should hide it (see occlusion.js).
   occluders: [],
+  // A plain, bright panel with clear edges all round can hold the picture by its own outline, without tags.
+  outline: { enabled: false },
   // Printed AprilTags (tag36h11) in the frame hold the picture at steep side angles.
   apriltag: {
     enabled: true,
@@ -187,6 +189,8 @@ export function normalizeSetup(json, { baseUrl = location.href, targetUrl, previ
   if (learn !== undefined) s.apriltag.learn = learn;
   const oblique = numParam('obliqueAngle');
   if (oblique !== undefined) s.apriltag.obliqueAngle = oblique;
+  const outline = boolParam('outline');
+  if (outline !== undefined) s.outline.enabled = outline;
   const gravity = boolParam('gravity');
   if (gravity !== undefined) s.apriltag.gravity = gravity;
   const hold = numParam('motionHold');
