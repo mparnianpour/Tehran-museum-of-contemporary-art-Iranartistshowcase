@@ -248,18 +248,22 @@ These are useful for testing, QR codes, and tuning on site without editing files
 
 ## About `setups/frame-01`
 
-This is the **cream panel** in the alcove: three vertical sheets, with the concrete pillar on its right. It was made with the setup tool from the wide photo of the alcove and replaces the ornate gold frame.
+This is the **cream panel** in the alcove, with **tag 1** on the concrete pillar to its right. Nothing was measured on site. The panel's shape and the depths were reconstructed from two photos taken with the same phone; their EXIF data gives the 23 mm lens.
 
-- **Its shape is estimated, not measured.** From the photo's perspective and the phone's lens (23 mm, read from earlier photos taken with the same phone), the panel is about 0.96 wide for every 1 high. From the angle of that photo, the pillar may hide a strip of the panel's right edge, so the picture's right edge was marked where the pillar starts.
-- **It can't hold the picture in AR yet.** The panel is too plain for image tracking: 89 feature points even with its surroundings, rated *Poor*. And the photo was taken before the tag went up. Until a photo with the tag arrives, image tracking stays on, in case it locks on from near where the photo was taken. Tag learning is off, so a tag can't be learned in the wrong place. Preview mode (`?preview=1`) shows the slideshow on the panel.
+- `photo.jpg`, the wide view of the alcove, shows the panel's top edge. The tracking image is made from it.
+- `photo-front.jpg`, the straight-on view, shows the panel's sides and bottom, the side wall, the pillar and the tag. Its top edge is just out of the picture.
+- **Result:** the panel is **1.09** times as wide as it is tall. The side wall stands **0.37** panel widths in front of it, and the pillar **0.33**. The tag is placed in 3D on the pillar's front, exactly as it appears in `photo-front.jpg`.
+- **Checks:** with the 23 mm lens, the panel's vertical and horizontal edges in the wide photo come out 91.6° apart (90° is perfect). The pillar depth found from one photo predicts where the pillar's edge appears in the other to within a few pixels.
 
-**To finish it, with one tag on the right pillar:**
+**The test tag is too small to hold the panel.** From where `photo-front.jpg` was taken, it's about 28 px across in a phone's HD camera image. Seen nearly straight on, a square that small barely changes shape when it's turned. So the viewer can't tell how the pillar is turned, and the panel is a whole panel-width away from the tag. Tested on both photos, the viewer's single-tag solve placed the panel 20–46% of its width off, although the tag model itself matches the photo to 0.4 px. Also, the paper doesn't lie flat: it stands off the pillar along its left and bottom edges.
 
-1. Print tag **1** as large as the pillar's front allows: **at least 300 mm** (A2), and bigger is better (`apriltag.html` prints any size). The test tag on the pillar reads as ID 1, but it's one of the small prints.
-2. Fix it **flat** on the pillar's front, facing the room, at about the panel's mid-height and close to the panel's side.
-3. Take a photo from straight in front, far enough back that all four edges of the panel and the tag are in it.
-4. Measure the panel's width and height, the printed tag's black square, and how far the pillar's front stands out in front of the panel.
-5. In `setup.html`, enter the sizes in step 3, the tag size in step 5 and the pillar in step 6, compile, and download it as `frame-01`, replacing this folder.
+**To finish it:**
+
+1. Print tag **1** at **300 mm** or larger (`apriltag.html`, A2 or bigger) and fix it **flat** on the pillar's front, at about the panel's mid-height. In simulation, a 30 cm tag there held the picture within 2–5% of the panel's width.
+2. Take one more photo like `photo-front.jpg`: straight on, but with the panel's top edge in it too, and the new tag. Landscape is fine.
+3. The tag is then placed again from that photo. The panel's shape and the depths above stay as they are.
+
+**Visitors holding the phone upright (portrait):** an upright phone sees a narrow strip, about 0.85 times as wide as its distance. To have the whole panel and the code on the pillar on screen together, stand about **1.7 panel widths** back. From closer, the picture still shows as long as the code on the pillar is on screen; the scanning hint says so. The panel's top and bottom fit easily, since an upright phone sees much more height than width.
 
 ## Files
 
