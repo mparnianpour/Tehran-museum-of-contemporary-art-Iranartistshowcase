@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { loadAppConfig, loadSetup, loadSlideshow, params } from './config.js';
 import { createOpeningGeometry, createDebugOutlines, createTagOutlines } from './frame-geometry.js';
 import { TrackingFusion } from './tracking-fusion.js';
-import { requestMotionPermission, startMotion, gravityInCamera } from './gravity.js';
+import { requestMotionPermission, startMotion, gravityInCamera, cameraOrientation } from './gravity.js';
 import { createOcclusion, MAX_OCCLUDERS, MAX_EDGES } from './occlusion.js';
 import { createSlideshowMaterial, EFFECTS } from './transitions.js';
 import { Slideshow } from './slideshow.js';
@@ -242,7 +242,9 @@ async function startAR() {
   // phone's processing on it; the AprilTags hold the picture on their own.
   if (setup.tracking.image === false) mindar.controller.stopProcessVideo();
 
-  const fusion = new TrackingFusion({ mindar, anchor, setup, gravity: useMotion ? gravityInCamera : null });
+  const fusion = new TrackingFusion({
+    mindar, anchor, setup, gravity: useMotion ? gravityInCamera : null, motion: useMotion ? cameraOrientation : null,
+  });
   state.fusion = fusion;
   if (cfg.debug) {
     const tagLines = new THREE.Group();

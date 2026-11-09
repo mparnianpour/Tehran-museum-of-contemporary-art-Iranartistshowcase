@@ -130,6 +130,10 @@ Keep the tags inside the area visitors will frame with their phone, ideally two 
 - **Keep it flat, facing the room.** When a turned tag is small in the picture, it can look the same seen from the left as from the right. In one simulated view of twelve, that put the picture 21% off.
 - **The phone's lens:** the viewer learns it from the tag only when the tag is big in the picture, for example when a visitor stands within about 3 m of a 300 mm tag. It then remembers the lens on that phone. Until then, it assumes a typical phone lens.
 - **Which way is down:** with a single tag in the setup, the viewer also reads the phone's motion sensor, so it knows which way is down and keeps the picture upright. iPhones ask the visitor's permission once. This stops the picture tipping when the tag's own tilt is misread: on still frames, the worst such view went from 6.5% to 0.6% off, and the average from 2.9% to 2.2%. Turn it off with `"gravity": false` in `apriltag`, or with `?gravity=0`.
+- **Panning past the tag:** once the tag has placed the picture, the motion sensor keeps it in place for up to **8 seconds** after the tag leaves the screen, by following how the phone turns. So a visitor standing close can pan across a large panel. It assumes the visitor stays roughly where they are; walking away moves the picture off. While the phone is turning, the viewer also follows the turn between tag readings, so the picture doesn't lag behind.
+  - **Tested** in a simulated portrait pan: standing 3.8 m from the panel, the phone turned 30° from the tag to the far side and stayed there. The picture stayed up the whole time, within **1.9%** of the panel's width with the phone's lens known, and **6.6%** with the lens guess 13% off. While turning, it was 2.6% and 4.2% off (median).
+  - **Safety net:** if the sensor ever disagrees with the tags, for example on a phone that reports its axes differently, the viewer stops using it.
+  - **Turning it off:** set `"motionHold": 0` in `apriltag`, or use `?motionHold=0`.
 
 **Tags either side of a wide panel need visitors to stand back far enough to see both.** A phone held upright sees a strip only about 0.85 times as wide as its distance from the tags. So tags 4 m apart are both in view only from about 5 m from them (6 m from a panel 1 m back). From closer, straight in front, the phone may see neither tag, and the picture doesn't appear until the visitor steps back or turns towards one side. From the side, one tag is enough to hold the picture, though less precisely. If visitors will mostly stand close, add a third tag above or below the middle of the panel, where it stays in view.
 
@@ -177,7 +181,7 @@ The test machine processes only about 12–15 frames per second, so it shows mor
 
 The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. Tags on the wall's edge and the pillar, turned 40° and 1 m in front of the panel, were placed in 3D to within 1.2–1.5 cm. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `gravity` (`true`: use the phone's motion sensor when the setup has a single tag), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `gravity` (`true`: use the phone's motion sensor when the setup has a single tag), `motionHold` (`8000` ms: how long the motion sensor keeps the picture in place after the tag leaves the screen; `0` turns this off), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
 ### Pillars and walls that hide the picture
 
@@ -206,7 +210,7 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `controls`, `caption`, `effectPicker`, `navigation`, `swipe` | `?controls=0` | show or hide parts of the interface |
 | `bleed`, `exposure` | `?bleed=0.01` | adjust the picture edge or brightness |
 | `filterMinCF`, `filterBeta` | `?filterBeta=0.05` | tracking smoothing (see below) |
-| `apriltag`, `learn`, `obliqueAngle`, `gravity` | `?apriltag=0` | turn AprilTag holding, learning or the motion sensor off, or change the switch-over angle |
+| `apriltag`, `learn`, `obliqueAngle`, `gravity`, `motionHold` | `?apriltag=0` | turn AprilTag holding, learning or the motion sensor off, change the switch-over angle, or how long the picture is held after the tag leaves the screen (ms) |
 | `debug` | `?debug=1` | outlines the tracking image, opening and tags, and shows what is holding the picture |
 
 **Tracking smoothing:** a lower `filterMinCF` gives steadier tracking at rest but more lag, and a higher `filterBeta` follows fast movement more closely. The defaults are `0.001` and `0.01`.
@@ -263,7 +267,7 @@ This is the **cream panel** in the alcove, with **tag 1** on the concrete pillar
 2. Take one more photo like `photo-front.jpg`: straight on, but with the panel's top edge in it too, and the new tag. Landscape is fine.
 3. The tag is then placed again from that photo. The panel's shape and the depths above stay as they are.
 
-**Visitors holding the phone upright (portrait):** an upright phone sees a narrow strip, about 0.85 times as wide as its distance. To have the whole panel and the code on the pillar on screen together, stand about **1.7 panel widths** back. From closer, the picture still shows as long as the code on the pillar is on screen; the scanning hint says so. The panel's top and bottom fit easily, since an upright phone sees much more height than width.
+**Visitors holding the phone upright (portrait):** an upright phone sees a narrow strip, about 0.85 times as wide as its distance. To have the whole panel and the code on the pillar on screen together, stand about **1.7 panel widths** back. From closer, the picture appears as soon as the code is on screen, and then stays in place for up to 8 seconds while the visitor pans across the panel. The scanning hint asks visitors to keep the code in view. The panel's top and bottom fit easily, since an upright phone sees much more height than width.
 
 ## Files
 
