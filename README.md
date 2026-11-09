@@ -115,14 +115,16 @@ You can reopen an existing setup to adjust it: open *Edit an existing setup inst
 
 ## Holding the picture from the side (AprilTags)
 
-Image tracking recognises the frame by its visual detail. That works well from the front, but from a steep side angle the detail is squashed, so the picture drifts or disappears. Printed **AprilTags** (black-and-white square codes, the `tag36h11` family) fix this, because they stay readable at steep angles. A tag can go in either of two places:
+Image tracking recognises the frame by its visual detail. That works well from the front, but from a steep side angle the detail is squashed, so the picture drifts or disappears. Printed **AprilTags** (black-and-white square codes, the `tag36h11` family) fix this, because they stay readable at steep angles. A tag can go in any of these places:
 
 - **Inside the frame.** Visitors don't see it in AR, because the artwork is drawn over it. One tag is enough.
 - **On the wall beside the frame.** Use **two**, one each side, at mid-height. This works whatever is inside the frame, and suits frames that are hard for image tracking, such as the ornate gold frame.
-- **On a plain panel with no frame.** Put **two** on the panel itself, near opposite corners, for example top-left and bottom-right, about 10 cm in from the edges. They're on the same surface as the picture, so no depth is needed, and the artwork covers them in AR.
+- **Beside a plain panel with no frame.** The tags don't need to be on the panel. Put **two** on the surfaces either side of it, such as the front of a pillar or the edge of a side wall: one each side, at about the panel's mid-height, as close to its edge as you can. They can be turned to face the visitors. If there's wall just above or below the panel, a tag there, centred, also works. (Tags on the panel itself work too, and the artwork covers them in AR, but they're never required.)
 - **Anywhere else, at any angle.** For example, on a pillar's front or on a surface turned towards the visitors. In step 5, enter the **printed tag size** (the black square) along with the size in step 3. The setup tool then places every tag in 3D from the setup photo, so there's nothing to measure: no angle and no distance. It reads the photo's lens from its EXIF data when present (phone photos include it); otherwise it works it out from the perspective. **The tags are on upright surfaces** (on by default) makes this much more precise: in tests, an angled tag was placed to within a few millimetres. Visitors will see tags that the artwork doesn't cover.
 
 Keep the tags inside the area visitors will frame with their phone, ideally two of them in view at once. With one small tag, the whole picture is worked out from that one square, so small errors get magnified across the panel.
+
+**Tags either side of a wide panel need visitors to stand back far enough to see both.** A phone held upright sees a strip only about 0.85 times as wide as its distance from the tags. So tags 4 m apart are both in view only from about 5 m from them (6 m from a panel 1 m back). From closer, straight in front, the phone may see neither tag, and the picture doesn't appear until the visitor steps back or turns towards one side. From the side, one tag is enough to hold the picture, though less precisely. If visitors will mostly stand close, add a third tag above or below the middle of the panel, where it stays in view.
 
 **How to use it**
 
@@ -158,10 +160,12 @@ Keep the tags inside the area visitors will frame with their phone, ideally two 
 | gold frame, 6 cm deep, two **20 cm** wall tags, depth entered | 100% | front 1.3%, 35–50°: 3.6%, 50–55°: 2.2% (median) |
 | plain 140 × 170 cm panel, two 20 cm tags on it, **tags only** | 100% | 55°: 1.6–3.9% |
 | alcove panel 350 × 300 cm, one 30 cm tag on the panel and one on the pillar **turned 40°**, placed in 3D from the setup photo | 100% | both tags in view: 1.5–2.6% at ±40°; only one tag in view: 5–10% |
+| same alcove, **no tags on the panel**: one 30 cm tag on the side wall's edge and one on the pillar, both 1 m in front of the panel and turned 40° towards the middle; visitor **7 m** back | 97% (all but the first shot) | front: 4.4% mean; 10–35°: 3.9%; 35–40°: 2.2% mean, 1.7% median |
+| the same, visitor **5.6 m** back | front: 1 of 15 shots (both tags just outside the phone's view); 25–40°: 80–100% | 35–40°: 3.8% mean |
 
 The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would.
 
-The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
+The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. Tags on the wall's edge and the pillar, turned 40° and 1 m in front of the panel, were placed in 3D to within 1.2–1.5 cm. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
 **Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
@@ -238,9 +242,10 @@ These are useful for testing, QR codes, and tuning on site without editing files
 
 **Still needed:**
 
-1. Two 200 mm tags (IDs 0 and 1), fixed on the panel near opposite corners. Wall tags beside the panel also work; then also measure how far the panel's surface stands off the wall.
-2. A straight-on photo showing all four edges of the panel, with the tags up.
-3. The panel's width and height.
+1. Two tags (IDs 0 and 1), **not on the panel**: one on the front of the pillar on the right, one on the edge of the side wall on the left, at about the panel's mid-height and close to its edges. They can be turned to face the visitors. Use **300 mm** tags (A2) for a panel this size, since visitors will stand several metres back.
+2. A straight-on photo showing all four edges of the panel and both tags.
+3. The panel's width and height, and the printed tag size (the black square).
+4. How far the pillar and the side wall stand out in front of the panel, so they can hide the picture from the side.
 
 Until then, `frame-01` below is still the gold frame.
 
