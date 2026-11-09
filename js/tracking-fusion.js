@@ -19,11 +19,12 @@
 
 import * as THREE from 'three';
 import { TagDetector } from './tag-detector.js';
-import { solveHomographyLS, applyHomography } from './homography.js';
+import { solveHomographyLS } from './homography.js';
 import {
   solvePlanarPose, anchorMatrixFromMvt, mvtFromAnchorMatrix, imageToMarker, viewAngle, OneEuroMatrixFilter,
   cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
 } from './tag-pose.js';
+import { squareFrame, poseFromTag, refinePose3D } from './camera.js';
 
 // How long a tag pose stays usable after the last detection: about 2.5 detection
 // intervals, so a slower phone doesn't make the picture blink between detections.
@@ -39,6 +40,7 @@ const LEARN_MAX_SAMPLES = 30;
 const MIN_TAG_LONG_SIDE_PX = 14;
 const MIN_TAG_SHORT_SIDE_PX = 5;
 const MAX_POSE_ERROR_PX = 3; // reject tag poses that don't fit the corners well
+const MAX_POSE_ERROR_3D_PX = 6; // 3D fits also absorb the estimated lens; allow a little more
 const FOCAL_SAMPLES = 40; // focal-length estimates kept (median used)
 const DEFAULT_FOCAL = 0.75; // x the camera image's long side, typical for phone main cameras
 
@@ -166,6 +168,10 @@ export class TrackingFusion extends EventTarget {
     for (const t of this.cfg.tags || []) {
       if (Array.isArray(t.corners) && t.corners.length === 4) this.known.set(t.id, { corners: t.corners, origin: 'setup' });
     }
+    // Tags off the picture's surface (any angle, in front or behind) need the full 3D solve.
+    const ow = Math.abs(this.setup.opening[1][0] - this.setup.opening[0][0]) || 1;
+    this.tags3d = this.wallOffset !== 0
+      || [...this.known.values()].some((t) => t.corners.some((c) => c.length === 3 && Math.abs(c[2]) > 0.005 * ow));
     if (this.cfg.learn) {
       try {
         const saved = JSON.parse(localStorage.getItem(this.storageKey) || '[]');
@@ -177,7 +183,9 @@ export class TrackingFusion extends EventTarget {
       minCutOff: this.cfg.filterMinCF ?? tracking.filterMinCF ?? 0.001,
       beta: this.cfg.filterBeta ?? tracking.filterBeta ?? 0.01,
     });
-    this.detector = new TagDetector({ family: this.cfg.family || 'tag36h11' });
+    // With image tracking paused (tags only) the camera stream is HD: detect at up to 1920 px.
+    const tagsOnly = this.setup.tracking?.image === false;
+    this.detector = new TagDetector({ family: this.cfg.family || 'tag36h11', maxSize: tagsOnly ? 1920 : 1280 });
     this.minInterval = 1000 / (this.cfg.maxRate || 20);
     if (this.known.size) this.dispatchEvent(new Event('tagschange'));
   }
@@ -280,8 +288,15 @@ export class TrackingFusion extends EventTarget {
       ids.push(m.id);
     }
     if (world.length < 4) return;
-    const pose = this.wallOffset !== 0 ? this._poseWithDepth(world, image) : solvePlanarPose(world, image, this.K);
-    if (!pose || pose.error > MAX_POSE_ERROR_PX) return;
+    // When every tag in view lies on the picture's own surface, the flat mapping is exact and
+    // needs no lens; the 3D solve is only for tags off the surface (at an angle, on a pillar...).
+    const ow = Math.abs(this.setup.opening[1][0] - this.setup.opening[0][0]) || 1;
+    const offSurface = this.tags3d && markers.some((m) => this.known.has(m.id)
+      && this._corners3d(this.known.get(m.id)).some((c) => Math.abs(c[2]) > 0.005 * ow));
+    const pose = offSurface
+      ? this._pose3D(markers.filter((m) => this.known.has(m.id)))
+      : solvePlanarPose(world.map((c) => [c[0], c[1]]), image, this.K);
+    if (!pose || pose.error > (offSurface ? MAX_POSE_ERROR_3D_PX : MAX_POSE_ERROR_PX)) return;
     if (this.wantCamera && !pose.C) {
       // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.
       try {
@@ -299,36 +314,54 @@ export class TrackingFusion extends EventTarget {
     this.tagPose = { matrix, time: nowMs, error: pose.error, ids, C: pose.C || null };
   }
 
+  /** A tag's corners in 3D (tracking-image px, z into the wall): 2D ones sit on the plane wallOffset behind the picture. */
+  _corners3d(known) {
+    return known.corners.map((c) => (c.length === 3 ? c : [c[0], c[1], this.wallOffset]));
+  }
+
   /**
-   * Tags on the wall, opening wallOffset in front of it: find the camera in 3D
-   * from the tags (with the estimated focal length), project the opening's
-   * corners at their real depth, and hand MindAR's renderer the mapping that
-   * puts the picture exactly there.
+   * Tags anywhere, at any angle: solve the phone's real pose from the 3D
+   * corners of every tag in view (with the lens estimated from the tags),
+   * project the picture's corners, and hand MindAR's renderer the mapping
+   * that puts the picture exactly there.
    */
-  _poseWithDepth(world, image) {
-    let H;
-    try {
-      H = solveHomographyLS(world, image);
-    } catch (err) {
-      return null;
+  _pose3D(markers) {
+    const pts = [];
+    const img = [];
+    let best = null;
+    let bestArea = 0;
+    for (const m of markers) {
+      const c3 = this._corners3d(this.known.get(m.id));
+      c3.forEach((c, i) => { pts.push(c); img.push(m.corners[i]); });
+      const frame = squareFrame(c3);
+      const s = frame.size;
+      try {
+        const Hl = solveHomographyLS([[0, 0], [s, 0], [s, s], [0, s]], m.corners);
+        const f = focalFromHomography(Hl, this.inputW / 2, this.inputH / 2);
+        if (f) this._addFocalSample(f);
+      } catch (err) { /* degenerate view of this tag */ }
+      const q = m.corners;
+      const area = Math.abs((q[0][0] - q[2][0]) * (q[1][1] - q[3][1]) - (q[1][0] - q[3][0]) * (q[0][1] - q[2][1])) / 2;
+      if (area > bestArea) { bestArea = area; best = { m, frame }; }
     }
-    let sq = 0;
-    for (let i = 0; i < world.length; i++) {
-      const [u, v] = applyHomography(H, world[i][0], world[i][1]);
-      sq += (u - image[i][0]) ** 2 + (v - image[i][1]) ** 2;
-    }
-    const error = Math.sqrt(sq / world.length);
-    const f = focalFromHomography(H, this.inputW / 2, this.inputH / 2);
-    if (f) this._addFocalSample(f);
+    if (!best) return null;
     const K = this.Kreal;
-    const { R, t } = decomposeHomography(H, K);
+    // Start from the biggest tag in view, and from the last pose if recent; keep the better fit.
+    const starts = [poseFromTag(best.m.corners, best.frame, K)];
+    if (this.lastRigid && performance.now() - this.lastRigid.time < 600) starts.push(this.lastRigid);
+    let fit = null;
+    for (const s0 of starts) {
+      const r = refinePose3D(pts, img, K, s0.R, s0.t, 8);
+      if (!fit || r.error < fit.error) fit = r;
+    }
+    if (!fit || !Number.isFinite(fit.error)) return null;
+    this.lastRigid = { R: fit.R, t: fit.t, time: performance.now() };
     const corners = this.setup.opening;
-    const projected = corners.map(([X, Y]) => projectPoint(R, t, K, X, Y, -this.wallOffset));
+    const projected = corners.map(([X, Y]) => projectPoint(fit.R, fit.t, K, X, Y, 0));
     if (projected.some((p) => !(p[2] > 0))) return null;
     const view = solvePlanarPose(corners, projected.map(([u, v]) => [u, v]), this.K);
     if (!view) return null;
-    const Cwall = TrackingFusion.cameraCentre(R, t);
-    return { mvt: view.mvt, error, C: [Cwall[0], Cwall[1], Cwall[2] + this.wallOffset] }; // picture plane is wallOffset in front
+    return { mvt: view.mvt, error: fit.error, C: TrackingFusion.cameraCentre(fit.R, fit.t) };
   }
 
   /** Accumulate a tag's corners on the wall (marker px) seen from the front; keep a robust median. */

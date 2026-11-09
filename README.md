@@ -120,7 +120,9 @@ Image tracking recognises the frame by its visual detail. That works well from t
 - **Inside the frame.** Visitors don't see it in AR, because the artwork is drawn over it. One tag is enough.
 - **On the wall beside the frame.** Use **two**, one each side, at mid-height. This works whatever is inside the frame, and suits frames that are hard for image tracking, such as the ornate gold frame.
 - **On a plain panel with no frame.** Put **two** on the panel itself, near opposite corners, for example top-left and bottom-right, about 10 cm in from the edges. They're on the same surface as the picture, so no depth is needed, and the artwork covers them in AR.
-- **On a pillar in front of the panel.** This works too. In the setup tool, enter how far the pillar's front stands out from the panel as a **negative** number in step 5. Visitors will see these tags, since the artwork doesn't cover them. Use one each side, so the pose isn't worked out from a single tag far from the picture.
+- **Anywhere else, at any angle.** For example, on a pillar's front or on a surface turned towards the visitors. In step 5, enter the **printed tag size** (the black square) along with the size in step 3. The setup tool then places every tag in 3D from the setup photo, so there's nothing to measure: no angle and no distance. It reads the photo's lens from its EXIF data when present (phone photos include it); otherwise it works it out from the perspective. **The tags are on upright surfaces** (on by default) makes this much more precise: in tests, an angled tag was placed to within a few millimetres. Visitors will see tags that the artwork doesn't cover.
+
+Keep the tags inside the area visitors will frame with their phone, ideally two of them in view at once. With one small tag, the whole picture is worked out from that one square, so small errors get magnified across the panel.
 
 **How to use it**
 
@@ -141,6 +143,7 @@ Image tracking recognises the frame by its visual detail. That works well from t
 - With one tag, image tracking holds it from the front (under 30° by default), and the tag takes over beyond that angle or whenever image tracking loses the frame. A short blend stops the picture jumping.
 - For tags on the wall, the viewer works in real 3D and places the opening in front of the wall by the measured depth. This needs the phone's real focal length, which the viewer estimates from the tags themselves whenever they're seen at an angle, and remembers on that phone. It doesn't rely on the image tracker's fixed 45° camera assumption, which phones don't match.
 - Small, distant tags are read from an enlarged copy of the camera image. That lets 15–20 cm tags be read from 2–3 m away.
+- In tags-only mode, image tracking is paused, so the viewer asks the phone for an HD camera stream instead. That makes distant tags larger in pixels.
 
 **How well it works (simulated phone camera, headless browser)**
 
@@ -154,6 +157,7 @@ Image tracking recognises the frame by its visual detail. That works well from t
 | gold frame, 6 cm deep, two 15 cm wall tags, depth entered | 100% | front 1.4%, 50–55°: 5.5% (median) |
 | gold frame, 6 cm deep, two **20 cm** wall tags, depth entered | 100% | front 1.3%, 35–50°: 3.6%, 50–55°: 2.2% (median) |
 | plain 140 × 170 cm panel, two 20 cm tags on it, **tags only** | 100% | 55°: 1.6–3.9% |
+| alcove panel 350 × 300 cm, one 30 cm tag on the panel and one on the pillar **turned 40°**, placed in 3D from the setup photo | 100% | both tags in view: 1.5–2.6% at ±40°; only one tag in view: 5–10% |
 
 The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would.
 

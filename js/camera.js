@@ -101,3 +101,156 @@ export function imageToPlane(R, t, K, [u, v], Z) {
   const s = (Z - C[2]) / D[2];
   return [C[0] + s * D[0], C[1] + s * D[1]];
 }
+
+/* ---------- tags anywhere, at any angle: full 3D ----------
+ *
+ * A tag's corners can be stored as 3D points in the picture's frame
+ * (tracking-image px; z into the wall). The setup tool measures them from
+ * the setup photo; the viewer then solves the phone's pose from whichever
+ * tags it sees, whatever surface they are on.
+ */
+
+const solveHomography4 = (src, dst) => {
+  // local copy to avoid a circular import; same maths as homography.solveHomography
+  const A = [];
+  const b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i];
+    const [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  const M = A.map((row, r) => [...row, b[r]]);
+  for (let c = 0; c < 8; c++) {
+    let p = c;
+    for (let r = c + 1; r < 8; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < 8; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= 8; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return [...M.map((row, r) => row[8] / row[r]), 1];
+};
+
+/** The square a tag's 3D corners span: origin, unit axes (x along the top edge, y down the side) and side length. */
+export function squareFrame(c) {
+  const sub = (a, b2) => [a[0] - b2[0], a[1] - b2[1], a[2] - b2[2]];
+  const ex0 = sub(c[1], c[0]);
+  const ey0 = sub(c[3], c[0]);
+  const size = (norm(ex0) + norm(ey0)) / 2;
+  const ex = ex0.map((v) => v / norm(ex0));
+  // Gram-Schmidt: make ey exactly perpendicular to ex
+  const d = ex[0] * ey0[0] + ex[1] * ey0[1] + ex[2] * ey0[2];
+  let ey = [ey0[0] - d * ex[0], ey0[1] - d * ex[1], ey0[2] - d * ex[2]];
+  ey = ey.map((v) => v / norm(ey));
+  return { origin: c[0], ex, ey, ez: cross(ex, ey), size };
+}
+
+/** Pose (R row-major 9, t) of a picture-frame from a square tag seen at imageCorners, given its 3D frame. */
+export function poseFromTag(imageCorners, frame, K) {
+  const s = frame.size;
+  const H = solveHomography4([[0, 0], [s, 0], [s, s], [0, s]], imageCorners);
+  const { R: Rt, t: tt } = decomposeHomography(H, K); // tag-local -> camera
+  // picture -> tag-local: Xl = M^T (Xp - o), with M = [ex ey ez] as columns
+  const M = [frame.ex, frame.ey, frame.ez];
+  const Rp = new Array(9);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) Rp[r * 3 + c] = Rt[r * 3] * M[0][c] + Rt[r * 3 + 1] * M[1][c] + Rt[r * 3 + 2] * M[2][c];
+  }
+  const o = frame.origin;
+  const tp = [0, 1, 2].map((r) => tt[r] - (Rp[r * 3] * o[0] + Rp[r * 3 + 1] * o[1] + Rp[r * 3 + 2] * o[2]));
+  return { R: Rp, t: tp, H };
+}
+
+function rodrigues(w) {
+  const th = Math.hypot(w[0], w[1], w[2]);
+  if (th < 1e-12) return [1, -w[2], w[1], w[2], 1, -w[0], -w[1], w[0], 1];
+  const [x, y, z] = [w[0] / th, w[1] / th, w[2] / th];
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  const C = 1 - c;
+  return [c + x * x * C, x * y * C - z * s, x * z * C + y * s, y * x * C + z * s, c + y * y * C, y * z * C - x * s, z * x * C - y * s, z * y * C + x * s, c + z * z * C];
+}
+
+function solveN(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-14) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
+/** Refine a pose on 3D points (Levenberg-Marquardt on reprojection error). Returns { R, t, error (RMS px) }. */
+export function refinePose3D(points, image, K, R, t, iterations = 10) {
+  const residuals = (Rr, tr) => {
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      const [u, v, z] = projectPoint(Rr, tr, K, points[i][0], points[i][1], points[i][2]);
+      if (!(z > 0)) return null;
+      out.push(u - image[i][0], v - image[i][1]);
+    }
+    return out;
+  };
+  const sq = (r) => r.reduce((s, v) => s + v * v, 0);
+  let r = residuals(R, t);
+  if (!r) return { R, t, error: Infinity };
+  let err = sq(r);
+  let lambda = 1e-3;
+  const ts = Math.max(1, norm(t));
+  const apply = (d) => [mul3(rodrigues([d[0], d[1], d[2]]), R), [t[0] + d[3] * ts, t[1] + d[4] * ts, t[2] + d[5] * ts]];
+  for (let it = 0; it < iterations; it++) {
+    const J = [];
+    for (let k = 0; k < 6; k++) {
+      const d = [0, 0, 0, 0, 0, 0];
+      d[k] = 1e-6;
+      const [Rk, tk] = apply(d);
+      const rk = residuals(Rk, tk);
+      if (!rk) return { R, t, error: Math.sqrt(err / r.length) };
+      J.push(rk.map((v, i) => (v - r[i]) / 1e-6));
+    }
+    const JtJ = J.map((a) => J.map((b2) => a.reduce((s, v, i) => s + v * b2[i], 0)));
+    const Jtr = J.map((a) => a.reduce((s, v, i) => s + v * r[i], 0));
+    let improved = false;
+    for (let tries = 0; tries < 6 && !improved; tries++) {
+      const A = JtJ.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+      const delta = solveN(A, Jtr.map((v) => -v));
+      if (!delta) break;
+      const [Rn, tn] = apply(delta);
+      const rn = residuals(Rn, tn);
+      if (rn && sq(rn) < err) {
+        R = orthonormalize(Rn);
+        t = tn;
+        r = residuals(R, t) || rn;
+        const e2 = sq(r);
+        const gain = err - e2;
+        err = e2;
+        lambda = Math.max(1e-9, lambda / 10);
+        improved = true;
+        if (gain < 1e-8) it = iterations;
+      } else lambda *= 10;
+    }
+    if (!improved) break;
+  }
+  return { R, t, error: Math.sqrt(err / r.length) };
+}
+
+/**
+ * Focal length in pixels from a 35 mm-equivalent focal length (EXIF
+ * FocalLengthIn35mmFilm). Phones quote it for their full 4:3 sensor, and
+ * wide photos are crops of its height, so the long side sets the scale.
+ */
+export function focalFrom35mm(f35, width, height) {
+  const long = Math.max(width, height);
+  return (f35 * Math.hypot(long, 0.75 * long)) / Math.hypot(36, 24);
+}

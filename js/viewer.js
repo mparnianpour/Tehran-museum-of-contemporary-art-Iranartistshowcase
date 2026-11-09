@@ -213,10 +213,21 @@ async function startAR() {
   if (cfg.debug) startDebugHud(anchor);
 
   const firstSlide = state.slideshow.start();
+  // Tags only: image tracking is paused, so its processing budget is free; ask the phone for an
+  // HD camera stream instead, so distant tags are 2-3x larger in pixels and read from further away.
+  const md = navigator.mediaDevices;
+  const originalGetUserMedia = md.getUserMedia;
+  if (setup.tracking.image === false) {
+    md.getUserMedia = (c) => originalGetUserMedia.call(md, {
+      ...c, video: { ...(typeof c.video === 'object' ? c.video : {}), width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+  }
   try {
     await mindar.start();
   } catch (err) {
     return showError(strings.cameraError, err);
+  } finally {
+    md.getUserMedia = originalGetUserMedia;
   }
   // Plain surfaces: image tracking can't recognise them, so don't spend the
   // phone's processing on it; the AprilTags hold the picture on their own.

@@ -98,6 +98,12 @@
         <p class="help">Printed tags keep the picture in place when visitors look from the side. They can go inside the frame, or on the wall beside it.</p>
         <p class="result hidden" id="tag-note"></p>
         <div class="row">
+          <label>Printed tag size: the black square (same unit as the size in step 3)
+            <input type="number" id="tag-size" min="0" step="any" inputmode="decimal" placeholder="e.g. 30"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="tags-upright" checked> The tags are on upright surfaces (walls, pillars)</label>
+        <p class="note">With the tag size and the size in step 3, tags anywhere and at any angle, on the panel, beside it, or on a pillar facing another way, are placed in 3D from the photo. The distance below is then not needed.</p>
+        <div class="row">
           <label>If the tags are not on the picture's surface: how far <b>behind</b> it they are, e.g. on the wall behind a frame (a positive number), or how far <b>in front</b>, e.g. on a pillar (a negative number). Same unit as the size in step 3.
             <input type="number" id="tag-depth" step="any" inputmode="decimal" placeholder="e.g. 6 or -100"></label>
         </div>

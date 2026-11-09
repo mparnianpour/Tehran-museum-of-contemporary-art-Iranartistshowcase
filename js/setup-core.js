@@ -3,7 +3,7 @@
 // the result. No UI code here.
 
 import { solveHomography, applyHomography, homographyW, estimateQuadAspect, invertHomography } from './homography.js';
-import { cameraMatrix, decomposeHomography, imageToPlane } from './camera.js';
+import { cameraMatrix, decomposeHomography, imageToPlane, focalFromHomography, focalFrom35mm } from './camera.js';
 
 // Typical phone main camera: focal length about 0.7 x the photo's long side.
 // Only used to correct wall tags for depth, where a rough value is enough.
@@ -191,6 +191,155 @@ export function tagsToTarget(photoTags, layout, photoSize, wallOffset = 0) {
   return photoTags.map((tag) => ({ id: tag.id, corners: tag.corners.map((p) => imageToPlane(R, t, K, p, wallOffset)) }));
 }
 
+/** EXIF FocalLengthIn35mmFilm from a JPEG's bytes, or null. */
+export function readFocal35(buffer) {
+  try {
+    const v = new DataView(buffer);
+    if (v.getUint16(0) !== 0xffd8) return null;
+    let p = 2;
+    while (p + 4 < v.byteLength) {
+      const marker = v.getUint16(p);
+      const len = v.getUint16(p + 2);
+      if (marker === 0xffe1 && v.getUint32(p + 4) === 0x45786966) { // "Exif"
+        const tiff = p + 10;
+        const le = v.getUint16(tiff) === 0x4949;
+        const u16 = (o) => v.getUint16(tiff + o, le);
+        const u32 = (o) => v.getUint32(tiff + o, le);
+        const findTag = (ifd, tag) => {
+          const n = u16(ifd);
+          for (let i = 0; i < n; i++) {
+            const e = ifd + 2 + i * 12;
+            if (u16(e) === tag) return e;
+          }
+          return -1;
+        };
+        const ptr = findTag(u32(4), 0x8769); // Exif sub-IFD
+        if (ptr < 0) return null;
+        const e = findTag(u32(ptr + 8), 0xa405); // FocalLengthIn35mmFilm (SHORT)
+        return e < 0 ? null : u16(e + 8) || null;
+      }
+      if ((marker & 0xff00) !== 0xff00) return null;
+      p += 2 + len;
+    }
+  } catch (err) { /* not a JPEG we can read */ }
+  return null;
+}
+
+/**
+ * Full 3D placement of tags seen in the setup photo, relative to the picture:
+ * works for tags on any surface at any angle (beside, in front of or behind
+ * the picture). Needs the picture's real size and the printed tag size (the
+ * same unit) and the photo's focal length. Returns tags whose corners are
+ * [x, y, z] in tracking-image px (z into the wall), plus the focal used.
+ */
+export function tagsTo3D({ photoTags, corners, size, tagSize, layout, photoSize, focal35, upright = true }) {
+  const [w, h] = photoSize;
+  const [W, H] = size;
+  const Hp = solveHomography([[0, 0], [W, 0], [W, H], [0, H]], corners);
+  const square = [[0, 0], [tagSize, 0], [tagSize, tagSize], [0, tagSize]];
+  const tagH = photoTags.map((t) => solveHomography(square, t.corners));
+  let focal = focal35 ? focalFrom35mm(focal35, w, h) : null;
+  let focalFrom = 'photo EXIF';
+  if (!focal) {
+    // No EXIF: the picture's known shape and the tags' squares, seen at an angle, reveal it.
+    const est = [Hp, ...tagH].map((Hm) => focalFromHomography(Hm, w / 2, h / 2)).filter((f) => f > 0.3 * Math.max(w, h) && f < 3 * Math.max(w, h));
+    est.sort((a, b) => a - b);
+    focal = est.length ? est[est.length >> 1] : PHOTO_FOCAL * Math.max(w, h);
+    focalFrom = est.length ? 'perspective in the photo' : 'typical phone lens (guess)';
+  }
+  const K = cameraMatrix(focal, w / 2, h / 2);
+  const { R: Rp, t: tp } = decomposeHomography(Hp, K);
+  const k = layout.openingWidth / W; // tracking px per unit
+  const [ox, oy] = layout.opening[0];
+  const tags = photoTags.map((tag, i) => {
+    const { R: Rt, t: tt } = decomposeHomography(tagH[i], K);
+    let pts = square.map(([x, y]) => {
+      const Xc = [0, 1, 2].map((r) => Rt[r * 3] * x + Rt[r * 3 + 1] * y + tt[r]);
+      const d = [Xc[0] - tp[0], Xc[1] - tp[1], Xc[2] - tp[2]];
+      return [0, 1, 2].map((c) => Rp[c] * d[0] + Rp[3 + c] * d[1] + Rp[6 + c] * d[2]); // R^T d, picture units
+    });
+    if (upright) pts = fitUprightTag(pts, tagSize, Rp, tp, K, tag.corners);
+    // A tag flat on the picture's own surface comes out parallel to it and within a hair of it
+    // (its distance is the least certain direction): place it exactly on the surface.
+    const ex = [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1], pts[1][2] - pts[0][2]];
+    const ey = [pts[3][0] - pts[0][0], pts[3][1] - pts[0][1], pts[3][2] - pts[0][2]];
+    const nz = (ex[0] * ey[1] - ex[1] * ey[0]) / (Math.hypot(...ex) * Math.hypot(...ey));
+    const meanZ = pts.reduce((acc, P) => acc + P[2], 0) / 4;
+    if (Math.abs(nz) > Math.cos((3 * Math.PI) / 180) && Math.abs(meanZ) < 0.02 * W) pts = pts.map((P) => [P[0], P[1], 0]);
+    return { id: tag.id, corners: pts.map((P) => [ox + P[0] * k, oy + P[1] * k, P[2] * k]) };
+  });
+  return { tags, focal, focalFrom };
+}
+
+/**
+ * Re-fit a tag assuming it is on an upright surface (a wall or pillar, turned
+ * at any angle; the tag itself may be rotated on it). A small square's tilt is
+ * poorly determined by its four corners alone; fixing "upright" leaves
+ * position, the surface's turn and the tag's rotation (5 numbers), which the
+ * photo pins down far better.
+ */
+function fitUprightTag(pts, s, Rp, tp, K, observed) {
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const unit = (a) => { const n = Math.hypot(a[0], a[1], a[2]) || 1; return a.map((v) => v / n); };
+  const a0 = unit(sub(pts[1], pts[0]));
+  const b0 = unit(sub(pts[3], pts[0]));
+  const n0 = [a0[1] * b0[2] - a0[2] * b0[1], a0[2] * b0[0] - a0[0] * b0[2], a0[0] * b0[1] - a0[1] * b0[0]];
+  const psi0 = Math.atan2(n0[0], n0[2]);
+  const h0 = [Math.cos(psi0), 0, -Math.sin(psi0)];
+  const phi0 = Math.atan2(a0[1], a0[0] * h0[0] + a0[2] * h0[2]);
+  const cornersOf = ([x, y, z, psi, phi]) => {
+    const h = [Math.cos(psi), 0, -Math.sin(psi)];
+    const a = [Math.cos(phi) * h[0], Math.sin(phi), Math.cos(phi) * h[2]];
+    const b = [-Math.sin(phi) * h[0], Math.cos(phi), -Math.sin(phi) * h[2]];
+    const o = [x, y, z];
+    return [o, o.map((v, i) => v + s * a[i]), o.map((v, i) => v + s * (a[i] + b[i])), o.map((v, i) => v + s * b[i])];
+  };
+  const project = (P) => {
+    const X = [0, 1, 2].map((r) => Rp[r * 3] * P[0] + Rp[r * 3 + 1] * P[1] + Rp[r * 3 + 2] * P[2] + tp[r]);
+    return [K[0][0] * X[0] / X[2] + K[0][2], K[1][1] * X[1] / X[2] + K[1][2]];
+  };
+  const residuals = (q) => cornersOf(q).flatMap((P, i) => { const [u, v] = project(P); return [u - observed[i][0], v - observed[i][1]]; });
+  const sq = (r) => r.reduce((acc, v) => acc + v * v, 0);
+  let q = [...pts[0], psi0, phi0];
+  let r = residuals(q);
+  let err = sq(r);
+  let lambda = 1e-3;
+  const steps = [1e-4 * s, 1e-4 * s, 1e-4 * s, 1e-6, 1e-6];
+  for (let it = 0; it < 30; it++) {
+    const J = steps.map((h, k2) => { const qq = q.slice(); qq[k2] += h; return residuals(qq).map((v, i) => (v - r[i]) / h); });
+    const JtJ = J.map((x) => J.map((y) => x.reduce((acc, v, i) => acc + v * y[i], 0)));
+    const Jtr = J.map((x) => x.reduce((acc, v, i) => acc + v * r[i], 0));
+    let improved = false;
+    for (let tries = 0; tries < 8 && !improved; tries++) {
+      const A = JtJ.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+      const d = solveSmall(A, Jtr.map((v) => -v));
+      if (!d) break;
+      const qn = q.map((v, i) => v + d[i]);
+      const rn = residuals(qn);
+      if (sq(rn) < err) { q = qn; r = rn; err = sq(rn); lambda = Math.max(1e-9, lambda / 10); improved = true; } else lambda *= 10;
+    }
+    if (!improved) break;
+  }
+  return cornersOf(q);
+}
+
+function solveSmall(A, b) {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c;
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    if (Math.abs(M[p][c]) < 1e-14) return null;
+    [M[c], M[p]] = [M[p], M[c]];
+    for (let r = 0; r < n; r++) {
+      if (r === c) continue;
+      const f = M[r][c] / M[c][c];
+      for (let k2 = c; k2 <= n; k2++) M[r][k2] -= f * M[c][k2];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+
 let compilerModule = null;
 
 /** Compile a tracking image (canvas or image) into a MindAR .mind buffer. */
@@ -254,13 +403,15 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
       ignoreInside: !!calibration.ignoreInside,
       tagDepth: calibration.tagDepth ?? null,
       sides: calibration.sides ?? null,
+      tagSize: calibration.tagSize ?? null,
+      photoFocal35: calibration.photoFocal35 ?? null,
       created: new Date().toISOString().slice(0, 10),
     },
   };
   if (tags.length || wallOffset) {
     // AprilTags seen in the setup photo: their exact place on the wall, in tracking-image pixels,
     // and how far that wall lies behind the opening's edge.
-    json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map(([x, y]) => [round(x), round(y)]) })) };
+    json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map((c) => c.map((v) => round(v))) })) };
     if (wallOffset) json.apriltag.wallOffset = round(wallOffset, 2); // + behind the picture, - in front
   }
   if (occluders.length) {

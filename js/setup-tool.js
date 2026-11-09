@@ -6,7 +6,7 @@ import { TagDetector } from './tag-detector.js';
 import {
   RATIO_PRESETS, estimateQuadAspect, isValidQuad, computeLayout, maxMargin, warpToTarget,
   compileTarget, trackingQuality, canvasToBlob, slugify, buildSetupJson, makeZip, formatJson,
-  flattenOpening, tagsToTarget,
+  flattenOpening, tagsToTarget, tagsTo3D, readFocal35,
 } from './setup-core.js';
 
 const $ = (id) => document.getElementById(id);
@@ -31,11 +31,13 @@ const st = {
   tagsOnly: false, // plain surface: hold the picture with AprilTags only
   tagsOnlyTouched: false, // the user set it, so don't change it automatically
   photoTags: [], // AprilTags found in the photo: [{ id, corners }] in photo pixels
+  photoFocal35: null, // the photo's 35 mm-equivalent focal length (EXIF), if known
+  tag3d: null, // { focal, focalFrom } when tags were placed in 3D
   tags: [], // the same tags in tracking-image pixels (on the wall plane)
   drag: null,
   art: null,
 };
-window.setupTool = { state: st, setCorners, loadPhotoFromUrl, compile, setSize, setMargin, makeZipBlob };
+window.setupTool = { state: st, setCorners, loadPhotoFromUrl, compile, setSize, setMargin, makeZipBlob, setFocal35: (f) => { st.photoFocal35 = f; mapTags(); refreshTagNote(); } };
 
 const canvas = $('stage-canvas');
 const ctx = canvas.getContext('2d');
@@ -45,7 +47,10 @@ init();
 function init() {
   $('photo-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file) loadPhotoFromUrl(URL.createObjectURL(file)).catch((err) => toast(err.message));
+    if (file) {
+      file.arrayBuffer().then((buf) => { st.photoFocal35 = readFocal35(buf); }).catch(() => { st.photoFocal35 = null; })
+        .then(() => loadPhotoFromUrl(URL.createObjectURL(file))).catch((err) => toast(err.message));
+    }
     e.target.value = '';
   });
   $('existing-load').addEventListener('click', () => loadExisting($('existing-id').value.trim()));
@@ -64,6 +69,7 @@ function init() {
   bindSlider('margin', (v) => { st.margin = v; changed(); });
   $('ignore-inside').addEventListener('change', (e) => { st.ignoreInside = e.target.checked; changed(); });
   $('tag-depth').addEventListener('input', () => { mapTags(); refreshTagNote(); draw(); });
+  for (const id of ['tag-size', 'tags-upright']) $(id).addEventListener(id === 'tag-size' ? 'input' : 'change', () => { mapTags(); refreshTagNote(); draw(); });
   $('tags-only').addEventListener('change', (e) => { st.tagsOnly = e.target.checked; st.tagsOnlyTouched = true; refreshTagNote(); });
   for (const id of ['occ-left-depth', 'occ-left-overlap', 'occ-right-depth', 'occ-right-overlap']) $(id).addEventListener('input', refreshOccNote);
   bindSlider('bleed', (v) => { st.bleed = v; draw(); });
@@ -141,6 +147,8 @@ async function loadExisting(id) {
     st.margin = cal.margin ?? st.margin;
     st.ignoreInside = cal.ignoreInside ?? false;
     $('ignore-inside').checked = st.ignoreInside;
+    $('tag-size').value = cal.tagSize ?? '';
+    st.photoFocal35 = cal.photoFocal35 ?? null;
     for (const side of ['left', 'right']) {
       $(`occ-${side}-depth`).value = cal.sides?.[side]?.depth ?? '';
       $(`occ-${side}-overlap`).value = cal.sides?.[side]?.overlap ?? '';
@@ -323,9 +331,24 @@ function wallOffsetPx() {
 }
 
 function mapTags() {
-  st.tags = st.layout && st.photoTags.length
-    ? tagsToTarget(st.photoTags, st.layout, [st.photo.width, st.photo.height], wallOffsetPx())
-    : [];
+  st.tag3d = null;
+  if (!st.layout || !st.photoTags.length) {
+    st.tags = [];
+    return;
+  }
+  const tagSize = parseFloat($('tag-size').value);
+  const size = measuredSize();
+  if (tagSize > 0 && size) {
+    // Full 3D: works for tags at any angle and any distance from the picture.
+    const r = tagsTo3D({
+      photoTags: st.photoTags, corners: st.corners, size, tagSize, layout: st.layout,
+      photoSize: [st.photo.width, st.photo.height], focal35: st.photoFocal35, upright: $('tags-upright').checked,
+    });
+    st.tags = r.tags;
+    st.tag3d = { focal: r.focal, focalFrom: r.focalFrom };
+  } else {
+    st.tags = tagsToTarget(st.photoTags, st.layout, [st.photo.width, st.photo.height], wallOffsetPx());
+  }
 }
 
 function refreshTagNote() {
@@ -334,6 +357,8 @@ function refreshTagNote() {
   if (st.photoTags.length) {
     const ids = st.photoTags.map((t) => t.id).join(', ');
     let extra = st.tagsOnly ? ' They will hold the picture on their own.' : ' They will hold the picture when visitors look from the side.';
+    if (st.tag3d) extra += ` Placed in 3D (lens from ${st.tag3d.focalFrom}).`;
+    else if (!measuredSize() || !(parseFloat($('tag-size').value) > 0)) extra += ' Enter the printed tag size and the size in step 3 to place them in 3D, which is needed if they are not on the picture\'s surface.';
     if (depth && !measuredSize()) extra = ' <b class="poor">Enter the opening size in step 3</b> so the tags\' distance from the picture can be used.';
     note.innerHTML = `<b class="good">AprilTag ${ids} found.</b>${extra}`;
   } else if (st.tagsOnly) {
@@ -723,9 +748,11 @@ function currentSetupJson(name) {
       ignoreInside: st.ignoreInside,
       tagDepth: parseFloat($('tag-depth').value) || null,
       sides: Object.keys(sideInputs()).length ? sideInputs() : null,
+      tagSize: parseFloat($('tag-size').value) || null,
+      photoFocal35: st.photoFocal35,
     },
     tags: st.tags,
-    wallOffset: wallOffsetPx(),
+    wallOffset: st.tag3d ? 0 : wallOffsetPx(),
     occluders: occluderBoxes(),
   });
 }
