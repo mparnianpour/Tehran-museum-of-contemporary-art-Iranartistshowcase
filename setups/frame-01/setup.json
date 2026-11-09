@@ -1,10 +1,10 @@
 {
-  "name": "Ornate gold frame",
+  "name": "Cream panel in the alcove",
   "target": "target.mind",
   "preview": "target.jpg",
-  "targetSize": [855, 1024],
-  "opening": [[94.15, 94.15], [760.84, 94.15], [760.84, 929.85], [94.15, 929.85]],
-  "openingAspect": 0.79776,
+  "targetSize": [991, 1024],
+  "opening": [[95.88, 95.88], [894.83, 95.88], [894.83, 928.12], [95.88, 928.12]],
+  "openingAspect": 0.96,
   "bleed": 0,
   "exposure": 1,
   "innerShadow": {
@@ -17,14 +17,20 @@
     "warmupTolerance": 5,
     "missTolerance": 10
   },
+  "apriltag": {
+    "learn": false
+  },
   "calibration": {
     "photo": "photo.jpg",
-    "photoSize": [1109, 2400],
-    "corners": [[0.17042, 0.30383], [0.84214, 0.29863], [0.84032, 0.68318], [0.1898, 0.6851]],
-    "openingSize": null,
-    "margin": 0.1412,
+    "photoSize": [924, 2000],
+    "corners": [[0.26299, 0.3125], [0.78896, 0.2745], [0.78463, 0.587], [0.2684, 0.57]],
+    "openingSize": [0.96, 1],
+    "margin": 0.12,
     "ignoreInside": true,
     "tagDepth": null,
-    "created": "2026-11-02"
+    "sides": null,
+    "tagSize": null,
+    "photoFocal35": 23,
+    "created": "2026-11-09"
   }
 }

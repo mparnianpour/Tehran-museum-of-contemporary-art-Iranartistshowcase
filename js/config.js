@@ -62,6 +62,7 @@ export const SETUP_DEFAULTS = {
     obliqueAngle: 30, // degrees: beyond this, the tag holds the picture instead of image tracking
     tags: [], // [{ id, corners: [[x, y] x4] }] in tracking-image pixels (written by the setup tool)
     wallOffset: 0, // how far the tags' wall lies behind the opening's edge, in tracking-image pixels
+    gravity: true, // with one tag in view, keep the picture upright using the phone's motion sensor
   },
 };
 
@@ -185,6 +186,8 @@ export function normalizeSetup(json, { baseUrl = location.href, targetUrl, previ
   if (learn !== undefined) s.apriltag.learn = learn;
   const oblique = numParam('obliqueAngle');
   if (oblique !== undefined) s.apriltag.obliqueAngle = oblique;
+  const gravity = boolParam('gravity');
+  if (gravity !== undefined) s.apriltag.gravity = gravity;
   return s;
 }
 

@@ -4,9 +4,15 @@
   "language": "en",
   "languages": ["en", "fa"],
   "strings": {
+    "en": {
+      "intro": "Point your phone at the white panel and the artworks will appear on it.",
+      "scanning": "Point your camera at the white panel"
+    },
     "fa": {
       "title": "نمایشگاه هنرمندان ایرانی",
-      "subtitle": "موزهٔ هنرهای معاصر تهران"
+      "subtitle": "موزهٔ هنرهای معاصر تهران",
+      "intro": "گوشی خود را به سمت صفحهٔ سفید بگیرید تا آثار هنری روی آن ظاهر شوند.",
+      "scanning": "دوربین را به سمت صفحهٔ سفید بگیرید"
     }
   },
 

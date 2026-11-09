@@ -24,7 +24,7 @@ import {
   solvePlanarPose, anchorMatrixFromMvt, mvtFromAnchorMatrix, imageToMarker, viewAngle, OneEuroMatrixFilter,
   cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
 } from './tag-pose.js';
-import { squareFrame, poseFromTag, refinePose3D } from './camera.js';
+import { squareFrame, poseFromTag, refinePose3D, uprightBasis, uprightAngle, refinePoseUpright } from './camera.js';
 
 // How long a tag pose stays usable after the last detection: about 2.5 detection
 // intervals, so a slower phone doesn't make the picture blink between detections.
@@ -41,8 +41,12 @@ const MIN_TAG_LONG_SIDE_PX = 14;
 const MIN_TAG_SHORT_SIDE_PX = 5;
 const MAX_POSE_ERROR_PX = 3; // reject tag poses that don't fit the corners well
 const MAX_POSE_ERROR_3D_PX = 6; // 3D fits also absorb the estimated lens; allow a little more
+const UPRIGHT_MAX_VIEW_DEG = 75; // single-tag answers further round to the side than this are taken as mirror images
 const FOCAL_SAMPLES = 40; // focal-length estimates kept (median used)
 const DEFAULT_FOCAL = 0.75; // x the camera image's long side, typical for phone main cameras
+// The lens can only be read from perspective that's big enough to measure: a tag ~50 px across
+// gives anything from a third to a hundred times the real focal length. Only learn it from bigger views.
+const FOCAL_MIN_SPAN_PX = 100;
 
 const median = (values) => {
   const s = [...values].sort((a, b) => a - b);
@@ -63,6 +67,13 @@ function sideLengths(corners) {
   });
 }
 
+/** The larger side of the image points' bounding box (px). */
+function imageSpan(points) {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+}
+
 /** Element-wise blend; both poses describe nearly the same placement while switching. */
 function blendMatrix(out, target, k) {
   const o = out.elements;
@@ -72,8 +83,10 @@ function blendMatrix(out, target, k) {
 }
 
 export class TrackingFusion extends EventTarget {
-  constructor({ mindar, anchor, setup }) {
+  constructor({ mindar, anchor, setup, gravity = null }) {
     super();
+    // () => which way is down in camera-image coordinates (phone motion sensor), or null
+    this.gravity = gravity;
     this.mindar = mindar;
     this.anchor = anchor;
     this.setup = setup;
@@ -210,7 +223,8 @@ export class TrackingFusion extends EventTarget {
       && (this.known.size > 0 || (this.cfg.learn && imageVisible))) {
       this.lastDetect = now;
       const imageAtGrab = imageVisible ? imageMatrix.clone() : null;
-      this.detector.detect(this.mindar.video).then((res) => res && this._onDetections(res, imageAtGrab));
+      const downAtGrab = this.gravity && this.cfg.gravity !== false ? this.gravity() : null;
+      this.detector.detect(this.mindar.video).then((res) => res && this._onDetections(res, imageAtGrab, downAtGrab));
     }
 
     const tagFresh = !!this.tagPose && now - this.tagPose.time < this.tagFreshMs;
@@ -247,7 +261,7 @@ export class TrackingFusion extends EventTarget {
     return { visible: this.visible, matrix: this.output, source, angle: this.angle, camera };
   }
 
-  _onDetections(res, imageAtGrab) {
+  _onDetections(res, imageAtGrab, down = null) {
     this.detections += 1;
     const resultTime = performance.now();
     if (this.lastResultTime) this.detectInterval += 0.2 * (Math.min(2000, resultTime - this.lastResultTime) - this.detectInterval);
@@ -293,15 +307,19 @@ export class TrackingFusion extends EventTarget {
     const ow = Math.abs(this.setup.opening[1][0] - this.setup.opening[0][0]) || 1;
     const offSurface = this.tags3d && markers.some((m) => this.known.has(m.id)
       && this._corners3d(this.known.get(m.id)).some((c) => Math.abs(c[2]) > 0.005 * ow));
-    const pose = offSurface
-      ? this._pose3D(markers.filter((m) => this.known.has(m.id)))
+    // One tag alone tilts the far side of a large picture with every small error in its own tilt;
+    // when the phone says which way is down, solve in 3D with the picture kept upright.
+    const upright = !!down && ids.length === 1;
+    const use3D = offSurface || upright;
+    const pose = use3D
+      ? this._pose3D(markers.filter((m) => this.known.has(m.id)), upright ? down : null)
       : solvePlanarPose(world.map((c) => [c[0], c[1]]), image, this.K);
-    if (!pose || pose.error > (offSurface ? MAX_POSE_ERROR_3D_PX : MAX_POSE_ERROR_PX)) return;
+    if (!pose || pose.error > (use3D ? MAX_POSE_ERROR_3D_PX : MAX_POSE_ERROR_PX)) return;
     if (this.wantCamera && !pose.C) {
       // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.
       try {
         const H = solveHomographyLS(world, image);
-        const f = focalFromHomography(H, this.inputW / 2, this.inputH / 2);
+        const f = imageSpan(image) >= FOCAL_MIN_SPAN_PX ? focalFromHomography(H, this.inputW / 2, this.inputH / 2) : null;
         if (f) this._addFocalSample(f);
         const { R, t } = decomposeHomography(H, this.Kreal);
         pose.C = TrackingFusion.cameraCentre(R, t);
@@ -311,7 +329,7 @@ export class TrackingFusion extends EventTarget {
     const nowMs = performance.now();
     if (!this.tagPose || nowMs - this.tagPose.time > 500) this.filter.reset();
     const matrix = new THREE.Matrix4().fromArray(this.filter.filter(res.time, raw.elements));
-    this.tagPose = { matrix, time: nowMs, error: pose.error, ids, C: pose.C || null };
+    this.tagPose = { matrix, time: nowMs, error: pose.error, ids, C: pose.C || null, upright: !!pose.upright };
   }
 
   /** A tag's corners in 3D (tracking-image px, z into the wall): 2D ones sit on the plane wallOffset behind the picture. */
@@ -325,7 +343,7 @@ export class TrackingFusion extends EventTarget {
    * project the picture's corners, and hand MindAR's renderer the mapping
    * that puts the picture exactly there.
    */
-  _pose3D(markers) {
+  _pose3D(markers, down = null) {
     const pts = [];
     const img = [];
     let best = null;
@@ -336,9 +354,11 @@ export class TrackingFusion extends EventTarget {
       const frame = squareFrame(c3);
       const s = frame.size;
       try {
-        const Hl = solveHomographyLS([[0, 0], [s, 0], [s, s], [0, s]], m.corners);
-        const f = focalFromHomography(Hl, this.inputW / 2, this.inputH / 2);
-        if (f) this._addFocalSample(f);
+        if (imageSpan(m.corners) >= FOCAL_MIN_SPAN_PX) {
+          const Hl = solveHomographyLS([[0, 0], [s, 0], [s, s], [0, s]], m.corners);
+          const f = focalFromHomography(Hl, this.inputW / 2, this.inputH / 2);
+          if (f) this._addFocalSample(f);
+        }
       } catch (err) { /* degenerate view of this tag */ }
       const q = m.corners;
       const area = Math.abs((q[0][0] - q[2][0]) * (q[1][1] - q[3][1]) - (q[1][0] - q[3][0]) * (q[0][1] - q[2][1])) / 2;
@@ -355,13 +375,46 @@ export class TrackingFusion extends EventTarget {
       if (!fit || r.error < fit.error) fit = r;
     }
     if (!fit || !Number.isFinite(fit.error)) return null;
+    const up = down ? this._uprightPose(pts, img, K, fit, down) : null;
+    if (up) fit = up;
     this.lastRigid = { R: fit.R, t: fit.t, time: performance.now() };
     const corners = this.setup.opening;
     const projected = corners.map(([X, Y]) => projectPoint(fit.R, fit.t, K, X, Y, 0));
     if (projected.some((p) => !(p[2] > 0))) return null;
     const view = solvePlanarPose(corners, projected.map(([u, v]) => [u, v]), this.K);
     if (!view) return null;
-    return { mvt: view.mvt, error: fit.error, C: TrackingFusion.cameraCentre(fit.R, fit.t) };
+    return { mvt: view.mvt, error: fit.error, C: TrackingFusion.cameraCentre(fit.R, fit.t), upright: !!up };
+  }
+
+  /**
+   * The phone's pose with the picture kept upright (down from the motion sensor):
+   * keep the turn the tag itself suggests (or the last pose's, if that fits better),
+   * and only look further round when that would put the phone behind the wall or
+   * implausibly far to the side.
+   */
+  _uprightPose(pts, img, K, fit, down) {
+    const R0 = uprightBasis(down);
+    const th0 = uprightAngle(R0, fit.R);
+    const recent = this.lastRigid && performance.now() - this.lastRigid.time < 600 ? this.lastRigid : null;
+    const op = this.setup.opening;
+    const mid = [(op[0][0] + op[1][0] + op[2][0] + op[3][0]) / 4, (op[0][1] + op[1][1] + op[2][1] + op[3][1]) / 4];
+    const minCos = Math.cos((UPRIGHT_MAX_VIEW_DEG * Math.PI) / 180);
+    const solve = (starts) => {
+      let best = null;
+      for (const th of starts) {
+        const r = refinePoseUpright(pts, img, K, R0, th, fit.t);
+        if (!r || !Number.isFinite(r.error)) continue;
+        const C = TrackingFusion.cameraCentre(r.R, r.t);
+        const off = Math.hypot(C[0] - mid[0], C[1] - mid[1], C[2]);
+        if (!(C[2] < 0) || -C[2] / off < minCos) continue; // behind the wall, or round the side
+        r.C = C;
+        if (!best || r.error < best.error) best = r;
+      }
+      return best;
+    };
+    const near = [th0];
+    if (recent) near.push(uprightAngle(R0, recent.R));
+    return solve(near) || solve([-60, -40, -20, 20, 40, 60].map((d) => th0 + (d * Math.PI) / 180));
   }
 
   /** Accumulate a tag's corners on the wall (marker px) seen from the front; keep a robust median. */

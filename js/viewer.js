@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { loadAppConfig, loadSetup, loadSlideshow, params } from './config.js';
 import { createOpeningGeometry, createDebugOutlines, createTagOutlines } from './frame-geometry.js';
 import { TrackingFusion } from './tracking-fusion.js';
+import { requestMotionPermission, startMotion, gravityInCamera } from './gravity.js';
 import { createOcclusion, MAX_OCCLUDERS, MAX_EDGES } from './occlusion.js';
 import { createSlideshowMaterial, EFFECTS } from './transitions.js';
 import { Slideshow } from './slideshow.js';
@@ -172,6 +173,14 @@ async function fetchBlobUrl(url) {
 
 async function startAR() {
   const { cfg, setup, strings } = state;
+  // A single tag holds the picture better when the phone says which way is down. Ask for the
+  // motion sensor while still inside the tap (iPhones only allow it then); with two or more
+  // tags it isn't needed, so visitors aren't asked.
+  const useMotion = setup.apriltag.enabled && setup.apriltag.gravity !== false && (setup.apriltag.tags || []).length === 1;
+  if (useMotion) {
+    requestMotionPermission();
+    startMotion(); // without permission no readings arrive, and tags work as before
+  }
   state.mode = 'ar';
   $('start').classList.add('hidden');
   $('loading').classList.remove('hidden');
@@ -233,7 +242,7 @@ async function startAR() {
   // phone's processing on it; the AprilTags hold the picture on their own.
   if (setup.tracking.image === false) mindar.controller.stopProcessVideo();
 
-  const fusion = new TrackingFusion({ mindar, anchor, setup });
+  const fusion = new TrackingFusion({ mindar, anchor, setup, gravity: useMotion ? gravityInCamera : null });
   state.fusion = fusion;
   if (cfg.debug) {
     const tagLines = new THREE.Group();
@@ -463,7 +472,8 @@ function startDebugHud(anchor) {
     hud.textContent = [
       `${state.found ? `held by ${state.trackingSource}` : 'searching'} · view ${Math.round(state.viewAngle || 0)}°`,
       `image ${anchor.visible ? 'on' : 'off'} ${updates}/s · minCF ${t.filterMinCF} β ${t.filterBeta}`,
-      `tags known ${tags} · seen ${seen} · ${state.tagFps}/s${f?.tagPose ? ` · err ${f.tagPose.error.toFixed(1)}px` : ''}`,
+      `tags known ${tags} · seen ${seen} · ${state.tagFps}/s${f?.tagPose ? ` · err ${f.tagPose.error.toFixed(1)}px` : ''}${f?.tagPose?.upright ? ' · upright' : ''}`,
+      `motion ${gravityInCamera() ? gravityInCamera().map((v) => v.toFixed(2)).join(' ') : 'none'}`,
       f ? `focal ${Math.round(f.focal)}px (${f.focalSamples.length} est.)${f.wallOffset ? ` · wall ${Math.round(f.wallOffset)}px behind` : ''}` : '',
     ].join('\n');
     updates = 0;

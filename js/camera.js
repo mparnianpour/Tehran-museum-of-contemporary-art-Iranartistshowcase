@@ -254,3 +254,85 @@ export function focalFrom35mm(f35, width, height) {
   const long = Math.max(width, height);
   return (f35 * Math.hypot(long, 0.75 * long)) / Math.hypot(36, 24);
 }
+
+/* ---------- upright pose: which way is down is known (phone motion sensor) ---------- */
+
+/** Rotation (row-major 9) that takes the picture's down axis (+y) to `down`, given in camera coordinates. */
+export function uprightBasis(down) {
+  const d = down.map((v) => v / norm(down));
+  const axis = cross([0, 1, 0], d);
+  const s = norm(axis);
+  const c = d[1];
+  if (s < 1e-9) return c > 0 ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : [1, 0, 0, 0, -1, 0, 0, 0, -1];
+  return rodrigues(axis.map((v) => (v / s) * Math.atan2(s, c)));
+}
+
+const turnY = (th) => [Math.cos(th), 0, Math.sin(th), 0, 1, 0, -Math.sin(th), 0, Math.cos(th)];
+
+/** The turn about the vertical that brings uprightBasis R0 closest to pose rotation R. */
+export function uprightAngle(R0, R) {
+  // M = R0^T R should be a pure turn about y: [c 0 s; 0 1 0; -s 0 c]
+  const m00 = R0[0] * R[0] + R0[3] * R[3] + R0[6] * R[6];
+  const m02 = R0[0] * R[2] + R0[3] * R[5] + R0[6] * R[8];
+  const m20 = R0[2] * R[0] + R0[5] * R[3] + R0[8] * R[6];
+  const m22 = R0[2] * R[2] + R0[5] * R[5] + R0[8] * R[8];
+  return Math.atan2(m02 - m20, m00 + m22);
+}
+
+/**
+ * Like refinePose3D, but the picture stays upright: R = R0 * turnY(theta),
+ * so only the turn about the vertical and the position are solved (4 unknowns).
+ */
+export function refinePoseUpright(points, image, K, R0, theta, t, iterations = 15) {
+  const pose = (p) => ({ R: mul3(R0, turnY(p[0])), t: [p[1], p[2], p[3]] });
+  const residuals = (p) => {
+    const { R, t: tt } = pose(p);
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      const [u, v, z] = projectPoint(R, tt, K, points[i][0], points[i][1], points[i][2]);
+      if (!(z > 0)) return null;
+      out.push(u - image[i][0], v - image[i][1]);
+    }
+    return out;
+  };
+  const sq = (r) => r.reduce((s, v) => s + v * v, 0);
+  let p = [theta, t[0], t[1], t[2]];
+  let r = residuals(p);
+  if (!r) return null;
+  let err = sq(r);
+  let lambda = 1e-3;
+  const ts = Math.max(1, norm(t));
+  const steps = [1e-6, 1e-6 * ts, 1e-6 * ts, 1e-6 * ts];
+  for (let it = 0; it < iterations; it++) {
+    const J = [];
+    for (let k = 0; k < 4; k++) {
+      const q = [...p];
+      q[k] += steps[k];
+      const rk = residuals(q);
+      if (!rk) return null;
+      J.push(rk.map((v, i) => (v - r[i]) / steps[k]));
+    }
+    // scale-free normal equations: parameters in units of their step
+    const JtJ = J.map((a) => J.map((b2) => a.reduce((s, v, i) => s + v * b2[i], 0)));
+    const Jtr = J.map((a) => a.reduce((s, v, i) => s + v * r[i], 0));
+    let improved = false;
+    for (let tries = 0; tries < 8 && !improved; tries++) {
+      const A = JtJ.map((row, i) => row.map((v, j) => (i === j ? v * (1 + lambda) + 1e-12 : v)));
+      const delta = solveN(A, Jtr.map((v) => -v));
+      if (!delta) break;
+      const q = p.map((v, i) => v + delta[i]);
+      const rn = residuals(q);
+      if (rn && sq(rn) < err) {
+        const gain = err - sq(rn);
+        p = q;
+        r = rn;
+        err = sq(rn);
+        lambda = Math.max(1e-9, lambda / 10);
+        improved = true;
+        if (gain < 1e-8) it = iterations;
+      } else lambda *= 10;
+    }
+    if (!improved) break;
+  }
+  return { ...pose(p), theta: p[0], error: Math.sqrt(err / r.length) };
+}

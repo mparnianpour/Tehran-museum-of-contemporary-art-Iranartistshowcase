@@ -124,6 +124,13 @@ Image tracking recognises the frame by its visual detail. That works well from t
 
 Keep the tags inside the area visitors will frame with their phone, ideally two of them in view at once. With one small tag, the whole picture is worked out from that one square, so small errors get magnified across the panel.
 
+**One tag on its own** holds the picture wherever it is, but less precisely, because the whole panel is worked out from that one square. In the simulated alcove below, the panel was 350 × 300 cm and a single 30 cm tag sat flat on the pillar 1 m in front of it, with the visitor 7 m back. The picture showed whenever the tag was in view, within **2–5%** of the panel's width when the viewer knew the phone's lens, and **4–8%** when its lens guess was 13% off. With a tag on each side it was 1–2%. To get the most from one tag:
+
+- **Make it big:** at least 300 mm, larger if the surface allows.
+- **Keep it flat, facing the room.** When a turned tag is small in the picture, it can look the same seen from the left as from the right. In one simulated view of twelve, that put the picture 21% off.
+- **The phone's lens:** the viewer learns it from the tag only when the tag is big in the picture, for example when a visitor stands within about 3 m of a 300 mm tag. It then remembers the lens on that phone. Until then, it assumes a typical phone lens.
+- **Which way is down:** with a single tag in the setup, the viewer also reads the phone's motion sensor, so it knows which way is down and keeps the picture upright. iPhones ask the visitor's permission once. This stops the picture tipping when the tag's own tilt is misread: on still frames, the worst such view went from 6.5% to 0.6% off, and the average from 2.9% to 2.2%. Turn it off with `"gravity": false` in `apriltag`, or with `?gravity=0`.
+
 **Tags either side of a wide panel need visitors to stand back far enough to see both.** A phone held upright sees a strip only about 0.85 times as wide as its distance from the tags. So tags 4 m apart are both in view only from about 5 m from them (6 m from a panel 1 m back). From closer, straight in front, the phone may see neither tag, and the picture doesn't appear until the visitor steps back or turns towards one side. From the side, one tag is enough to hold the picture, though less precisely. If visitors will mostly stand close, add a third tag above or below the middle of the panel, where it stays in view.
 
 **How to use it**
@@ -162,12 +169,15 @@ Keep the tags inside the area visitors will frame with their phone, ideally two 
 | alcove panel 350 × 300 cm, one 30 cm tag on the panel and one on the pillar **turned 40°**, placed in 3D from the setup photo | 100% | both tags in view: 1.5–2.6% at ±40°; only one tag in view: 5–10% |
 | same alcove, **no tags on the panel**: one 30 cm tag on the side wall's edge and one on the pillar, both 1 m in front of the panel and turned 40° towards the middle; visitor **7 m** back | 97% (all but the first shot) | front: 4.4% mean; 10–35°: 3.9%; 35–40°: 2.2% mean, 1.7% median |
 | the same, visitor **5.6 m** back | front: 1 of 15 shots (both tags just outside the phone's view); 25–40°: 80–100% | 35–40°: 3.8% mean |
+| same alcove, **one tag only**: 30 cm, flat on the pillar 1 m in front of the panel; visitor 7 m back; 12 still views from −40° to 40°, motion sensor on | 100% | phone's lens known: 2.2% mean, worst 4.7%; lens guess 13% off: 3.7% mean, worst 7.7% |
+| the same, live walk-past (lens guess 13% off, plus the test machine's lag) | 94% (all but startup) | 6–7% |
+| the same tag **turned 40°** towards the middle, still views | 100% | lens known: 3.3% mean, but 2 of 12 views mirrored (7% and 21%) |
 
 The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would.
 
 The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. Tags on the wall's edge and the pillar, turned 40° and 1 m in front of the panel, were placed in 3D to within 1.2–1.5 cm. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `gravity` (`true`: use the phone's motion sensor when the setup has a single tag), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
 ### Pillars and walls that hide the picture
 
@@ -196,7 +206,7 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `controls`, `caption`, `effectPicker`, `navigation`, `swipe` | `?controls=0` | show or hide parts of the interface |
 | `bleed`, `exposure` | `?bleed=0.01` | adjust the picture edge or brightness |
 | `filterMinCF`, `filterBeta` | `?filterBeta=0.05` | tracking smoothing (see below) |
-| `apriltag`, `learn`, `obliqueAngle` | `?apriltag=0` | turn AprilTag holding or learning off, or change the switch-over angle |
+| `apriltag`, `learn`, `obliqueAngle`, `gravity` | `?apriltag=0` | turn AprilTag holding, learning or the motion sensor off, or change the switch-over angle |
 | `debug` | `?debug=1` | outlines the tracking image, opening and tags, and shows what is holding the picture |
 
 **Tracking smoothing:** a lower `filterMinCF` gives steadier tracking at rest but more lag, and a higher `filterBeta` follows fast movement more closely. The defaults are `0.001` and `0.01`.
@@ -238,30 +248,18 @@ These are useful for testing, QR codes, and tuning on site without editing files
 
 ## About `setups/frame-01`
 
-**Update:** the gold frame is being replaced by a **plain cream panel** of three vertical sheets, with no frame. The panel is too plain for image tracking (5 feature points in its photo), so it will use **tags only**. The photo received so far cuts off the panel's top and bottom, so the setup can't be made yet.
+This is the **cream panel** in the alcove: three vertical sheets, with the concrete pillar on its right. It was made with the setup tool from the wide photo of the alcove and replaces the ornate gold frame.
 
-**Still needed:**
+- **Its shape is estimated, not measured.** From the photo's perspective and the phone's lens (23 mm, read from earlier photos taken with the same phone), the panel is about 0.96 wide for every 1 high. From the angle of that photo, the pillar may hide a strip of the panel's right edge, so the picture's right edge was marked where the pillar starts.
+- **It can't hold the picture in AR yet.** The panel is too plain for image tracking: 89 feature points even with its surroundings, rated *Poor*. And the photo was taken before the tag went up. Until a photo with the tag arrives, image tracking stays on, in case it locks on from near where the photo was taken. Tag learning is off, so a tag can't be learned in the wrong place. Preview mode (`?preview=1`) shows the slideshow on the panel.
 
-1. Two tags (IDs 0 and 1), **not on the panel**: one on the front of the pillar on the right, one on the edge of the side wall on the left, at about the panel's mid-height and close to its edges. They can be turned to face the visitors. Use **300 mm** tags (A2) for a panel this size, since visitors will stand several metres back.
-2. A straight-on photo showing all four edges of the panel and both tags.
-3. The panel's width and height, and the printed tag size (the black square).
-4. How far the pillar and the side wall stand out in front of the panel, so they can hide the picture from the side.
+**To finish it, with one tag on the right pillar:**
 
-Until then, `frame-01` below is still the gold frame.
-
-This is the **ornate gold frame** on the grey gallery wall, made with the setup tool from its photo. Because the wall behind it may change, the tracking image is the frame alone: it ends just inside the frame's outer edge, and the inside of the opening is ignored. The opening wasn't measured; its shape was estimated from the photo as 0.798 (close to 4:5, such as 80 × 100 cm).
-
-**Image tracking alone does not reliably recognise this frame.** Its carving repeats, and the gilding is shiny. In tests with your photo, it never locked on to the frame alone, and only now and then when wall was included. So this frame needs the AprilTags.
-
-**To finish it:**
-
-1. Print tags **0** and **1** at **200 mm** on A3 (`apriltag.html`).
-2. Fix them on the wall to the left and right of the frame, at mid-height, 15–20 cm from its outer edge.
-3. Measure the opening's width and height, and how far the frame's inner edge stands out from the wall.
-4. Take a new setup photo with the tags up. In `setup.html`, enter the sizes in step 3 and the depth in step 5, and compile.
-5. Download the setup as `frame-01` and replace this folder.
-
-Until then, the viewer has no reliable way to hold the picture on this frame. With the tags in place, tests showed the picture held 100% of the time, within 1–4% of the opening's width, from the front to 55° to the side.
+1. Print tag **1** as large as the pillar's front allows: **at least 300 mm** (A2), and bigger is better (`apriltag.html` prints any size). The test tag on the pillar reads as ID 1, but it's one of the small prints.
+2. Fix it **flat** on the pillar's front, facing the room, at about the panel's mid-height and close to the panel's side.
+3. Take a photo from straight in front, far enough back that all four edges of the panel and the tag are in it.
+4. Measure the panel's width and height, the printed tag's black square, and how far the pillar's front stands out in front of the panel.
+5. In `setup.html`, enter the sizes in step 3, the tag size in step 5 and the pillar in step 6, compile, and download it as `frame-01`, replacing this folder.
 
 ## Files
 
@@ -282,6 +280,7 @@ js/tag-detector.js, apriltag-worker.js  AprilTag detection off the main thread
 js/tag-pose.js                 maps tag corners to the picture's position, in MindAR's terms
 js/camera.js                   real 3D camera maths: focal length from tags, pose, depth
 js/occlusion.js                which part of the picture a pillar or wall hides, from where the phone is
+js/gravity.js                  which way is down, from the phone's motion sensor (single-tag setups)
 apriltag.html                  printable AprilTags
 setups/<id>/                   one folder per frame setup
 artworks/                      slideshow images
