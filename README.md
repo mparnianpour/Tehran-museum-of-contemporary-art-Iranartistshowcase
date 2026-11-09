@@ -100,6 +100,7 @@ You can reopen an existing setup to adjust it: open *Edit an existing setup inst
 
 - The phone recognises the frame from visual detail, such as wood grain, chips, tile joints and nearby objects. Plain white walls with a plain frame are hard to track. If the rating is *Poor*, include more surroundings, improve the lighting, or add some texture near the frame.
 - **Detail that repeats is hard too**, even when there's a lot of it. Carved, gilded frames (beading, rosettes) look alike from one spot to the next, so image tracking has trouble locking on. For frames like that, AprilTags should be the main tracker (see below).
+- **Plain surfaces**, such as a blank paper or canvas panel with no frame, can't be recognised by image tracking at all. When step 6 rates tracking *Poor*, the tool switches on **Hold the picture with the tags only** (step 5). The viewer then pauses image tracking, which saves the phone's battery, and the AprilTags do all the work. The tags must be in the setup photo.
 - Take the setup photo in the same light, and with the same surroundings, that visitors will see.
 - If the wall around the frame changes (posters, signs, furniture), make a new setup.
 
@@ -117,6 +118,7 @@ Image tracking recognises the frame by its visual detail. That works well from t
 
 - **Inside the frame.** Visitors don't see it in AR, because the artwork is drawn over it. One tag is enough.
 - **On the wall beside the frame.** Use **two**, one each side, at mid-height. This works whatever is inside the frame, and suits frames that are hard for image tracking, such as the ornate gold frame.
+- **On a plain panel with no frame.** Put **two** on the panel itself, near opposite corners, for example top-left and bottom-right, about 10 cm in from the edges. They're on the same surface as the picture, so no depth is needed, and the artwork covers them in AR.
 
 **How to use it**
 
@@ -149,12 +151,13 @@ Image tracking recognises the frame by its visual detail. That works well from t
 | gold frame, 6 cm deep, two 15 cm wall tags, depth **not** entered | 100% | front 3.5%, 50–55°: 14% (median) |
 | gold frame, 6 cm deep, two 15 cm wall tags, depth entered | 100% | front 1.4%, 50–55°: 5.5% (median) |
 | gold frame, 6 cm deep, two **20 cm** wall tags, depth entered | 100% | front 1.3%, 35–50°: 3.6%, 50–55°: 2.2% (median) |
+| plain 140 × 170 cm panel, two 20 cm tags on it, **tags only** | 100% | 55°: 1.6–3.9% |
 
 The test machine processes only about 12–15 frames per second, so it shows more lag while the camera is moving than a phone would.
 
 The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is the depth in tracking-image pixels. For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is the depth in tracking-image pixels. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
 ---
 
@@ -213,6 +216,16 @@ These are useful for testing, QR codes, and tuning on site without editing files
 | `calibration` | the photo, corners and margin it was made from, so the tool can reopen it |
 
 ## About `setups/frame-01`
+
+**Update:** the gold frame is being replaced by a **plain cream panel** of three vertical sheets, with no frame. The panel is too plain for image tracking (5 feature points in its photo), so it will use **tags only**. The photo received so far cuts off the panel's top and bottom, so the setup can't be made yet.
+
+**Still needed:**
+
+1. Two 200 mm tags (IDs 0 and 1), fixed on the panel near opposite corners. Wall tags beside the panel also work; then also measure how far the panel's surface stands off the wall.
+2. A straight-on photo showing all four edges of the panel, with the tags up.
+3. The panel's width and height.
+
+Until then, `frame-01` below is still the gold frame.
 
 This is the **ornate gold frame** on the grey gallery wall, made with the setup tool from its photo. Because the wall behind it may change, the tracking image is the frame alone: it ends just inside the frame's outer edge, and the inside of the opening is ignored. The opening wasn't measured; its shape was estimated from the photo as 0.798 (close to 4:5, such as 80 × 100 cm).
 

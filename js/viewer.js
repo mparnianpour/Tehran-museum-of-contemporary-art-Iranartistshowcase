@@ -215,6 +215,9 @@ async function startAR() {
   } catch (err) {
     return showError(strings.cameraError, err);
   }
+  // Plain surfaces: image tracking can't recognise them, so don't spend the
+  // phone's processing on it; the AprilTags hold the picture on their own.
+  if (setup.tracking.image === false) mindar.controller.stopProcessVideo();
 
   const fusion = new TrackingFusion({ mindar, anchor, setup });
   state.fusion = fusion;

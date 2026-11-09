@@ -50,6 +50,7 @@ export const SETUP_DEFAULTS = {
     filterBeta: 0.01, // higher = follows fast movement more closely (but more jitter)
     warmupTolerance: 5,
     missTolerance: 10,
+    image: true, // false = hold the picture with AprilTags only (for plain surfaces image tracking can't recognise)
   },
   // Printed AprilTags (tag36h11) in the frame hold the picture at steep side angles.
   apriltag: {

@@ -28,6 +28,8 @@ const st = {
   target: null,
   compiled: null, // { buffer, points, key }
   ignoreInside: true, // flatten the opening so what's inside the frame can't affect tracking
+  tagsOnly: false, // plain surface: hold the picture with AprilTags only
+  tagsOnlyTouched: false, // the user set it, so don't change it automatically
   photoTags: [], // AprilTags found in the photo: [{ id, corners }] in photo pixels
   tags: [], // the same tags in tracking-image pixels (on the wall plane)
   drag: null,
@@ -62,6 +64,7 @@ function init() {
   bindSlider('margin', (v) => { st.margin = v; changed(); });
   $('ignore-inside').addEventListener('change', (e) => { st.ignoreInside = e.target.checked; changed(); });
   $('tag-depth').addEventListener('input', () => { mapTags(); refreshTagNote(); draw(); });
+  $('tags-only').addEventListener('change', (e) => { st.tagsOnly = e.target.checked; st.tagsOnlyTouched = true; refreshTagNote(); });
   bindSlider('bleed', (v) => { st.bleed = v; draw(); });
   bindSlider('shadow', (v) => { st.shadow = v; draw(); });
   bindSlider('exposure', (v) => { st.exposure = v; draw(); });
@@ -137,6 +140,9 @@ async function loadExisting(id) {
     st.margin = cal.margin ?? st.margin;
     st.ignoreInside = cal.ignoreInside ?? false;
     $('ignore-inside').checked = st.ignoreInside;
+    st.tagsOnly = json.tracking?.image === false;
+    st.tagsOnlyTouched = true;
+    $('tags-only').checked = st.tagsOnly;
     $('tag-depth').value = cal.tagDepth ?? '';
     st.bleed = json.bleed ?? 0;
     st.shadow = json.innerShadow?.strength ?? st.shadow;
@@ -287,9 +293,11 @@ function refreshTagNote() {
   const depth = parseFloat($('tag-depth').value);
   if (st.photoTags.length) {
     const ids = st.photoTags.map((t) => t.id).join(', ');
-    let extra = ' They will hold the picture when visitors look from the side.';
+    let extra = st.tagsOnly ? ' They will hold the picture on their own.' : ' They will hold the picture when visitors look from the side.';
     if (depth > 0 && !measuredSize()) extra = ' <b class="poor">Enter the opening size in step 3</b> so the frame depth can be used.';
     note.innerHTML = `<b class="good">AprilTag ${ids} found.</b>${extra}`;
+  } else if (st.tagsOnly) {
+    note.innerHTML = '<b class="poor">No AprilTag in this photo.</b> With tags only, the tags must be in the setup photo: put them up and take the photo again. <a href="apriltag.html" target="_blank">Print tags</a>.';
   } else {
     note.innerHTML = 'No AprilTag in this photo. That\'s fine: tags put up later are learned by the viewer once a phone recognises the frame from the front. <a href="apriltag.html" target="_blank">Print tags</a>.';
   }
@@ -627,8 +635,17 @@ async function compile() {
     st.compiled = { ...result, key };
     const q = trackingQuality(result.points.length);
     const secs = ((performance.now() - started) / 1000).toFixed(0);
+    if (q.level === 'poor' && !st.tagsOnlyTouched) {
+      st.tagsOnly = true;
+      $('tags-only').checked = true;
+      refreshTagNote();
+    }
     $('compile-result').innerHTML = `<b class="${q.level}">${q.label} tracking expected</b>: ${result.points.length} feature points (${secs}s).`
-      + (q.level === 'poor' ? ' Try including more of the frame and wall, better light, or a more detailed backdrop.' : '');
+      + (q.level === 'poor'
+        ? (st.tagsOnly
+          ? ' This surface is too plain for image tracking, so the AprilTags will hold the picture on their own (step 5).'
+          : ' Try including more of the frame and wall, better light, or a more detailed backdrop, or use AprilTags only (step 5).')
+        : '');
     $('compile-result').classList.remove('hidden');
     if (!$('setup-id').value) $('setup-id').value = `frame-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`;
     setView('target');
@@ -657,7 +674,7 @@ function currentSetupJson(name) {
     bleed: st.bleed,
     innerShadow: { strength: st.shadow, size: SETUP_DEFAULTS.innerShadow.size },
     exposure: st.exposure,
-    tracking: SETUP_DEFAULTS.tracking,
+    tracking: { ...SETUP_DEFAULTS.tracking, image: !st.tagsOnly },
     calibration: {
       photoSize: [st.photo.width, st.photo.height],
       corners: st.corners,

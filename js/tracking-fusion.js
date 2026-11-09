@@ -25,7 +25,10 @@ import {
   cameraMatrix, decomposeHomography, focalFromHomography, projectPoint, imageToPlane,
 } from './tag-pose.js';
 
-const TAG_FRESH_MS = 300; // how long a tag pose stays usable after the last detection
+// How long a tag pose stays usable after the last detection: about 2.5 detection
+// intervals, so a slower phone doesn't make the picture blink between detections.
+const TAG_FRESH_MIN_MS = 300;
+const TAG_FRESH_MAX_MS = 1000;
 const BLEND_MS = 350; // cross-blend time when switching between image and tag tracking
 const LEARN_MAX_ANGLE = 25; // only learn tag placements from near-frontal views
 const LEARN_MIN_SAMPLES = 8;
@@ -86,6 +89,12 @@ export class TrackingFusion extends EventTarget {
     this.detections = 0;
     this.lastMarkers = [];
     this.focalSamples = [];
+    this.detectInterval = 100; // smoothed time between detection results (ms)
+    this.lastResultTime = 0;
+  }
+
+  get tagFreshMs() {
+    return Math.min(TAG_FRESH_MAX_MS, Math.max(TAG_FRESH_MIN_MS, 2.5 * this.detectInterval));
   }
 
   get focalKey() {
@@ -172,7 +181,7 @@ export class TrackingFusion extends EventTarget {
       this.detector.detect(this.mindar.video).then((res) => res && this._onDetections(res, imageAtGrab));
     }
 
-    const tagFresh = !!this.tagPose && now - this.tagPose.time < TAG_FRESH_MS;
+    const tagFresh = !!this.tagPose && now - this.tagPose.time < this.tagFreshMs;
     if (tagFresh) this.angle = viewAngle(this.tagPose.matrix);
     else if (imageVisible) this.angle = viewAngle(imageMatrix);
 
@@ -202,6 +211,9 @@ export class TrackingFusion extends EventTarget {
 
   _onDetections(res, imageAtGrab) {
     this.detections += 1;
+    const resultTime = performance.now();
+    if (this.lastResultTime) this.detectInterval += 0.2 * (Math.min(2000, resultTime - this.lastResultTime) - this.detectInterval);
+    this.lastResultTime = resultTime;
     this.lastMarkers = res.markers;
     if (res.width !== this.inputW || res.height !== this.inputH) return;
     const markers = res.markers.filter((m) => {
