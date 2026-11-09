@@ -318,7 +318,7 @@ function refreshOccNote() {
 function wallOffsetPx() {
   const depth = parseFloat($('tag-depth').value);
   const size = measuredSize();
-  if (!(depth > 0) || !size || !st.layout) return 0;
+  if (!depth || !Number.isFinite(depth) || !size || !st.layout) return 0;
   return (depth / size[0]) * st.layout.openingWidth;
 }
 
@@ -334,7 +334,7 @@ function refreshTagNote() {
   if (st.photoTags.length) {
     const ids = st.photoTags.map((t) => t.id).join(', ');
     let extra = st.tagsOnly ? ' They will hold the picture on their own.' : ' They will hold the picture when visitors look from the side.';
-    if (depth > 0 && !measuredSize()) extra = ' <b class="poor">Enter the opening size in step 3</b> so the frame depth can be used.';
+    if (depth && !measuredSize()) extra = ' <b class="poor">Enter the opening size in step 3</b> so the tags\' distance from the picture can be used.';
     note.innerHTML = `<b class="good">AprilTag ${ids} found.</b>${extra}`;
   } else if (st.tagsOnly) {
     note.innerHTML = '<b class="poor">No AprilTag in this photo.</b> With tags only, the tags must be in the setup photo: put them up and take the photo again. <a href="apriltag.html" target="_blank">Print tags</a>.';
@@ -721,7 +721,7 @@ function currentSetupJson(name) {
       openingSize: measuredSize(),
       margin: st.layout.margin,
       ignoreInside: st.ignoreInside,
-      tagDepth: parseFloat($('tag-depth').value) > 0 ? parseFloat($('tag-depth').value) : null,
+      tagDepth: parseFloat($('tag-depth').value) || null,
       sides: Object.keys(sideInputs()).length ? sideInputs() : null,
     },
     tags: st.tags,

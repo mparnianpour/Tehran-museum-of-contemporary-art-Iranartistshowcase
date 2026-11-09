@@ -156,7 +156,8 @@ export class TrackingFusion extends EventTarget {
     this.post = this.mindar.postMatrixs[0];
     this.postInv = this.post.clone().invert();
     this.markerH = c.markerDimensions[0][1];
-    this.wallOffset = Math.max(0, Number(this.cfg.wallOffset) || 0);
+    // How far the tags' plane is behind the picture (+), or in front of it (-, e.g. on a pillar).
+    this.wallOffset = Number(this.cfg.wallOffset) || 0;
     let saved = NaN;
     try { saved = parseFloat(localStorage.getItem(this.focalKey)); } catch (err) { /* ignore */ }
     this.focal = Number.isFinite(saved) ? saved : DEFAULT_FOCAL * Math.max(this.inputW, this.inputH);
@@ -253,8 +254,8 @@ export class TrackingFusion extends EventTarget {
     if (this.cfg.learn && imageAtGrab && viewAngle(imageAtGrab) <= LEARN_MAX_ANGLE) {
       const mvt = mvtFromAnchorMatrix(imageAtGrab, this.postInv, this.markerH);
       let toWall;
-      if (this.wallOffset > 0) {
-        // Image tracking describes the opening's plane; the tags are on the wall behind it.
+      if (this.wallOffset !== 0) {
+        // Image tracking describes the opening's plane; the tags are behind or in front of it.
         const { R, t } = this._poseFromImage(imageAtGrab);
         toWall = (p) => imageToPlane(R, t, this.Kreal, p, this.wallOffset);
       } else {
@@ -279,7 +280,7 @@ export class TrackingFusion extends EventTarget {
       ids.push(m.id);
     }
     if (world.length < 4) return;
-    const pose = this.wallOffset > 0 ? this._poseWithDepth(world, image) : solvePlanarPose(world, image, this.K);
+    const pose = this.wallOffset !== 0 ? this._poseWithDepth(world, image) : solvePlanarPose(world, image, this.K);
     if (!pose || pose.error > MAX_POSE_ERROR_PX) return;
     if (this.wantCamera && !pose.C) {
       // Tags on the picture's own plane: its real pose (and the phone's lens) straight from the tags.

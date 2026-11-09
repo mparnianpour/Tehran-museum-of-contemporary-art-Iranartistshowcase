@@ -181,7 +181,7 @@ export function flattenOpening(canvas, layout, inset = 0.012) {
  * slightly closer to the middle, which is undone here.
  */
 export function tagsToTarget(photoTags, layout, photoSize, wallOffset = 0) {
-  if (!(wallOffset > 0)) {
+  if (!wallOffset) {
     const toTarget = invertHomography(layout.toPhoto);
     return photoTags.map((t) => ({ id: t.id, corners: t.corners.map(([u, v]) => applyHomography(toTarget, u, v)) }));
   }
@@ -257,11 +257,11 @@ export function buildSetupJson({ name, layout, aspect, bleed, innerShadow, expos
       created: new Date().toISOString().slice(0, 10),
     },
   };
-  if (tags.length || wallOffset > 0) {
+  if (tags.length || wallOffset) {
     // AprilTags seen in the setup photo: their exact place on the wall, in tracking-image pixels,
     // and how far that wall lies behind the opening's edge.
     json.apriltag = { tags: tags.map((t) => ({ id: t.id, corners: t.corners.map(([x, y]) => [round(x), round(y)]) })) };
-    if (wallOffset > 0) json.apriltag.wallOffset = round(wallOffset, 2);
+    if (wallOffset) json.apriltag.wallOffset = round(wallOffset, 2); // + behind the picture, - in front
   }
   if (occluders.length) {
     // Pillars / side walls in front of the picture (tracking-image px; near = how far they stand out).

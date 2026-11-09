@@ -120,6 +120,7 @@ Image tracking recognises the frame by its visual detail. That works well from t
 - **Inside the frame.** Visitors don't see it in AR, because the artwork is drawn over it. One tag is enough.
 - **On the wall beside the frame.** Use **two**, one each side, at mid-height. This works whatever is inside the frame, and suits frames that are hard for image tracking, such as the ornate gold frame.
 - **On a plain panel with no frame.** Put **two** on the panel itself, near opposite corners, for example top-left and bottom-right, about 10 cm in from the edges. They're on the same surface as the picture, so no depth is needed, and the artwork covers them in AR.
+- **On a pillar in front of the panel.** This works too. In the setup tool, enter how far the pillar's front stands out from the panel as a **negative** number in step 5. Visitors will see these tags, since the artwork doesn't cover them. Use one each side, so the pose isn't worked out from a single tag far from the picture.
 
 **How to use it**
 
@@ -158,7 +159,7 @@ The test machine processes only about 12–15 frames per second, so it shows mor
 
 The tag positions found by the setup tool were within 0.5–0.8 px of the truth on a 200 px tag. For wall tags, after correcting for depth, they were within 3 mm of the truth; without the correction they were 1.3–1.9 cm off. With 15 cm wall tags, the far tag was sometimes too foreshortened to read at 55°. With 20 cm tags, both were read in 26 of 27 shots.
 
-**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is the depth in tracking-image pixels. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
+**Settings** (`apriltag` in `setup.json`, all optional): `enabled` (default `true`), `learn` (`true`), `obliqueAngle` (`30` degrees), `tags` and `wallOffset`. The last two are written by the setup tool; `wallOffset` is how far the tags' surface is behind the picture in tracking-image pixels, negative when it's in front, e.g. on a pillar. `tracking.image: false` turns image tracking off (tags only). For testing, turn them off with `?apriltag=0` or `?learn=0`, or try `?obliqueAngle=20`. With `?debug=1`, tag positions are outlined (green: from the setup, cyan: learned), and the readout shows what is holding the picture and the viewing angle.
 
 ### Pillars and walls that hide the picture
 

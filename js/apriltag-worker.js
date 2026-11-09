@@ -30,13 +30,39 @@ onmessage = (e) => {
     return;
   }
   const grey = detector.grey;
-  const out = markers.map((m) => {
+  const found = markers.map((m) => {
     const raw = m.corners.map((c) => [c.x, c.y]);
     const refined = refineQuad(grey, raw);
     return { id: m.id, corners: refined || raw, refined: !!refined, hamming: m.hammingDistance };
   });
-  postMessage({ seq, markers: out, buffer }, [buffer]);
+  postMessage({ seq, markers: dedupe(found), buffer }, [buffer]);
 };
+
+/**
+ * The same tag can be found twice (its outer edge and a slightly smaller
+ * contour just inside it). Counting it twice skews the pose, so keep one:
+ * the refined one, else the larger.
+ */
+function dedupe(markers) {
+  const centre = (c) => [(c[0][0] + c[1][0] + c[2][0] + c[3][0]) / 4, (c[0][1] + c[1][1] + c[2][1] + c[3][1]) / 4];
+  const size = (c) => Math.hypot(c[2][0] - c[0][0], c[2][1] - c[0][1]);
+  const kept = [];
+  for (const m of markers) {
+    const [mx, my] = centre(m.corners);
+    const twin = kept.findIndex((k) => {
+      if (k.id !== m.id) return false;
+      const [kx, ky] = centre(k.corners);
+      return Math.hypot(mx - kx, my - ky) < 0.25 * Math.max(size(k.corners), size(m.corners));
+    });
+    if (twin < 0) kept.push(m);
+    else {
+      const k = kept[twin];
+      const better = (m.refined && !k.refined) || (m.refined === k.refined && size(m.corners) > size(k.corners));
+      if (better) kept[twin] = m;
+    }
+  }
+  return kept;
+}
 
 function sample(g, x, y) {
   const w = g.width;
